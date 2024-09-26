@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+venv.bak/
+env.bak/
+
+# Flask specific
+instance/
+.webassets-cache
+*.db
+*.sqlite3
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.DS_Store
+
+# Environment Variables
+.env
+*.env
+
+# Log files
+*.log
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Coverage reports
+coverage.xml
+*.cover
+*.py,cover
+.coverage
+.cache
+nosetests.xml
+test-results/
+.tox/
+.venv/

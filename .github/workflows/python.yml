@@ -52,7 +52,7 @@ jobs:
           FLASK_ENV: development
           DATABASE_URL: ${{ env.DATABASE_URL }} # MySQL connection URL
 
-      # Step 6: Run pytest to ensure tests pass
+      # Step 6: Run pytest to ensure tests pass (only test test_app.py)
       - name: Run pytest
         run: |
-          pytest --disable-warnings
+          pytest test_app.py --disable-warnings

@@ -7,7 +7,7 @@ from config import Config  # Import the Config class
 app = Flask(__name__)
 bcrypt = Bcrypt(app)
 
-# Configure the app (load from Config class)
+# Configure the app (load from Config class) modified
 app.config.from_object(Config)
 
 # Initialize the database with the app

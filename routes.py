@@ -43,7 +43,7 @@ def validate_user_data(data, fields_to_validate):
     return True, None
 
 
-@user_routes.route('/user', methods=['POST'])
+#@user_routes.route('/user', methods=['POST'])
 def create_user():
     try:
         data = request.get_json()
@@ -95,7 +95,7 @@ def create_user():
         return jsonify({"error": "An internal server error occurred"}), 500
 
 
-@user_routes.route('/user/self', methods=['GET'])
+#@user_routes.route('/user/self', methods=['GET'])
 @auth.login_required
 def get_user_info():
     try:

@@ -56,15 +56,19 @@ build {
   sources = ["source.amazon-ebs.ubuntu-webapp"]
 
   provisioner "file" {
-    source      = "../"  # Local Flask app directory
-    destination = "/tmp/"  # Remote directory
+    source      = "../"  
+    destination = "/tmp/"  
   }
 
   provisioner "shell" {
-    script = "install.sh"  # This installs MySQL, Python, etc.
+    script = "install.sh"  
   }
 
   provisioner "shell" {
-    script = "flask_setup.sh"  # This sets up the Flask API
+    script = "flask_setup.sh"  
   }
+  post-processor "manifest" {
+    output     = "manifest.json"
+    strip_path = true
+  }
 }

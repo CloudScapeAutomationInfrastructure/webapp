@@ -19,3 +19,4 @@ flask_sqlalchemy
 flask_httpauth
 python-dotenv
 pymysql
+cryptography

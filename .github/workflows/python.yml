@@ -1,4 +1,4 @@
-name: Python Application CI with MySQL
+name: Python Application CI with MySQL and Packer
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-and-test:
-    name: Run Python Tests with MySQL
+    name: Run Python Tests with MySQL and Validate Packer
     runs-on: ubuntu-latest
 
     services:
@@ -22,37 +22,39 @@ jobs:
           - 3306:3306
 
     steps:
-      # Step 1: Checkout the code from the repository
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Set up Python environment (specify Python version)
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.12" # Specify the Python version you're using
+          python-version: "3.12"
 
-      # Step 3: Install dependencies (requirements.txt should be present in your repo)
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Step 4: Set environment variables for MySQL connection (DATABASE_URL should be set to MySQL)
       - name: Set up environment variables
         run: |
           echo "DATABASE_URL=mysql+pymysql://test_user:test_password@127.0.0.1:3306/test_db" >> $GITHUB_ENV
           echo "SECRET_KEY=mysecretkey" >> $GITHUB_ENV
 
-      # Step 5: Start the Flask application (optional, if needed)
-      - name: Start the Flask application
+      - name: Run Packer fmt
+        run: |
+          packer fmt -check aws-packer/aws.pkr.hcl
+
+      - name: Run Packer validate
+        run: |
+          packer validate aws-packer/aws.pkr.hcl
+
+      - name: Start Flask application
         run: |
           nohup python app.py &
         env:
           FLASK_ENV: development
-          DATABASE_URL: ${{ env.DATABASE_URL }} # MySQL connection URL
+          DATABASE_URL: ${{ env.DATABASE_URL }}
 
-      # Step 6: Run pytest to ensure tests pass (only test test_app.py)
       - name: Run pytest
         run: |
           pytest test_app.py --disable-warnings

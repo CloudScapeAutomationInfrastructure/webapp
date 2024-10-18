@@ -38,14 +38,14 @@ variable "ssh_username" {
 }
 
 source "amazon-ebs" "ubuntu-webapp" {
-  region                    = "${var.region}"
-  source_ami                = "${var.source_ami}"
-  instance_type             = "${var.instance_type}"
-  ssh_username              = "${var.ssh_username}"
-  ami_name                  = "webappServer-{{timestamp}}"
-  ami_description           = "webappServer_vm-ubuntu-24-04-lts-${formatdate("YYYY_MM_DD_HH_MM", timestamp())}"
-  vpc_id                    = "${var.vpc_id}"
-  subnet_id                 = "${var.subnet_id}"
+  region                      = var.region
+  source_ami                  = var.source_ami
+  instance_type               = var.instance_type
+  ssh_username                = var.ssh_username
+  ami_name                    = "webappServer-{{timestamp}}"
+  ami_description             = "webappServer_vm-ubuntu-24-04-lts-${formatdate("YYYY_MM_DD_HH_MM", timestamp())}"
+  vpc_id                      = var.vpc_id
+  subnet_id                   = var.subnet_id
   associate_public_ip_address = true
   tags = {
     Name = "WebServer App AMI"
@@ -56,19 +56,26 @@ build {
   sources = ["source.amazon-ebs.ubuntu-webapp"]
 
   provisioner "file" {
-    source      = "../"  
-    destination = "/tmp/"  
+    source      = "install.sh" # Change to a specific file path
+    destination = "/tmp/install.sh"
+  }
+
+  provisioner "file" {
+    source      = "flask_setup.sh" # Change to the specific script file
+    destination = "/tmp/flask_setup.sh"
   }
 
   provisioner "shell" {
-    script = "install.sh"  
+    inline = [
+      "chmod +x /tmp/install.sh",
+      "chmod +x /tmp/flask_setup.sh",
+      "/tmp/install.sh",    # Run install script
+      "/tmp/flask_setup.sh" # Run flask setup script
+    ]
   }
 
-  provisioner "shell" {
-    script = "flask_setup.sh"  
-  }
   post-processor "manifest" {
     output     = "manifest.json"
-    strip_path = true
-  }
+    strip_path = true
+  }
 }

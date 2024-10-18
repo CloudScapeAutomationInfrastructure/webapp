@@ -17,3 +17,4 @@ requests
 flask_bcrypt
 flask_sqlalchemy
 flask_httpauth
+python-dotenv

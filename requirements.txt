@@ -16,6 +16,4 @@ fastapi
 requests
 flask_bcrypt
 flask_sqlalchemy
-dotenv
 flask_httpauth
-sqlalchemy.exc

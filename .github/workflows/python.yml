@@ -40,6 +40,11 @@ jobs:
           echo "DATABASE_URL=mysql+pymysql://test_user:test_password@127.0.0.1:3306/test_db" >> $GITHUB_ENV
           echo "SECRET_KEY=mysecretkey" >> $GITHUB_ENV
 
+      - name: Run Packer init
+        run: |
+          cd aws-packer
+          packer init .
+
       - name: Run Packer fmt
         run: |
           packer fmt -check aws-packer/aws.pkr.hcl

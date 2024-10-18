@@ -48,13 +48,6 @@ jobs:
         run: |
           packer validate aws-packer/aws.pkr.hcl
 
-      - name: Start Flask application
-        run: |
-          nohup python app.py &
-        env:
-          FLASK_ENV: development
-          DATABASE_URL: ${{ env.DATABASE_URL }}
-
       - name: Run pytest
         run: |
           pytest test_app.py --disable-warnings

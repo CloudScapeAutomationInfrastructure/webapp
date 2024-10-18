@@ -14,4 +14,4 @@ Werkzeug==3.0.4
 pytest==8.3.3
 fastapi
 requests
-
+flask_bcrypt

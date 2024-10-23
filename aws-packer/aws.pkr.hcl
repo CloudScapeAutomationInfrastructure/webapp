@@ -36,23 +36,12 @@ variable "ssh_username" {
   type    = string
   default = "ubuntu"
 }
-variable "envfile" {
-  type    = string
-}
-
-
-# New variable for the additional AWS account ID to share the AMI with
-variable "additional_user" {
-  type    = string
-  default = "311141531170"
-}
 
 source "amazon-ebs" "ubuntu-webapp" {
   region                      = var.region
   source_ami                  = var.source_ami
   instance_type               = var.instance_type
   ssh_username                = var.ssh_username
-  ami_users                   = [var.additional_user]
   ami_name                    = "webappServer-{{timestamp}}"
   ami_description             = "webappServer_vm-ubuntu-24-04-lts-${formatdate("YYYY_MM_DD_HH_MM", timestamp())}"
   vpc_id                      = var.vpc_id
@@ -67,48 +56,26 @@ build {
   sources = ["source.amazon-ebs.ubuntu-webapp"]
 
   provisioner "file" {
-    source      = "../app.py"
-    destination = "/tmp/"
+    source      = "install.sh" # Change to a specific file path
+    destination = "/tmp/install.sh"
   }
+
   provisioner "file" {
-    source      = "../config.py"
-    destination = "/tmp/"
-  }
-  provisioner "file" {
-    source      = "../conftest.py"
-    destination = "/tmp/"
-  }
-  provisioner "file" {
-    source      = "../models.py"
-    destination = "/tmp/"
-  }
-  provisioner "file" {
-    source      = "../routes.py"
-    destination = "/tmp/"
-  }
-  provisioner "file" {
-    source      = "../test_app.py"
-    destination = "/tmp/"
-  }
-  provisioner "file" {
-    source      = "../requirements.txt"
-    destination = "/tmp/"
-  }
-   provisioner "file" {
-    source      = var.envfile  # Path where the .env is created during GitHub Actions
-    destination = "/home/ubuntu/.env"  # Target path inside the instance/AMI
-  }
-  provisioner "shell" {
-    script = "install.sh"
+    source      = "flask_setup.sh" # Change to the specific script file
+    destination = "/tmp/flask_setup.sh"
   }
 
   provisioner "shell" {
-    script = "flask_setup.sh"
+    inline = [
+      "chmod +x /tmp/install.sh",
+      "chmod +x /tmp/flask_setup.sh",
+      "/tmp/install.sh",    # Run install script
+      "/tmp/flask_setup.sh" # Run flask setup script
+    ]
   }
 
   post-processor "manifest" {
     output     = "manifest.json"
     strip_path = true
   }
-
 }

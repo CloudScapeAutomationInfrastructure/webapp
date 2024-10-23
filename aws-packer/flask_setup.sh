@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Copy the Flask app code from temp directory
+sudo mkdir -p /var/www/html/api
 sudo mv /tmp/* /var/www/html/api/
-sudo groupadd csye6225
-sudo useradd -r -g csye6225 -s /usr/sbin/nologin csye6225
+
 # Change ownership of the application artifacts and configuration files
 sudo chown -R csye6225:csye6225 /var/www/html/api
 
@@ -17,7 +17,7 @@ After=network.target
 User=csye6225
 Group=csye6225
 WorkingDirectory=/var/www/html/api
-ExecStart=python3 /var/www/html/api/app.py
+ExecStart=/var/www/html/api/venv/bin/python /var/www/html/api/app.py
 
 [Install]
 WantedBy=multi-user.target

@@ -38,8 +38,8 @@ variable "ssh_username" {
 }
 variable "envfile" {
   type    = string
+  default = "../.env"  
 }
-
 
 # New variable for the additional AWS account ID to share the AMI with
 variable "additional_user" {

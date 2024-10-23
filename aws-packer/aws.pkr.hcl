@@ -38,7 +38,7 @@ variable "ssh_username" {
 }
 
 source "amazon-ebs" "ubuntu-webapp" {
-  region                      = varr.region
+  region                      = var.region
   source_ami                  = var.source_ami
   instance_type               = var.instance_type
   ssh_username                = var.ssh_username

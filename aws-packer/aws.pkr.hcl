@@ -36,9 +36,10 @@ variable "ssh_username" {
   type    = string
   default = "ubuntu"
 }
-// variable "envfile" {
-//   type    = string
-// }
+variable "envfile" {
+  type    = string
+  default = "/home/ubuntu/.env"
+}
 
 
 # New variable for the additional AWS account ID to share the AMI with
@@ -94,10 +95,10 @@ build {
     source      = "../requirements.txt"
     destination = "/tmp/"
   }
-  //  provisioner "file" {
-  //   source      = var.envfile  # Path where the .env is created during GitHub Actions
-  //   destination = "/home/ubuntu/.env"  # Target path inside the instance/AMI
-  // }
+   provisioner "file" {
+    source      = var.envfile  # Path where the .env is created during GitHub Actions
+    destination = "/home/ubuntu/.env"  # Target path inside the instance/AMI
+  }
   provisioner "shell" {
     script = "install.sh"
   }

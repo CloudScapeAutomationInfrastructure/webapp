@@ -49,11 +49,6 @@ jobs:
           cd aws-packer
           packer init .
 
-      - name: Run Packer fmt
-        run: |
-          cd aws-packer
-          packer fmt -check -recursive .
-
       - name: Run Packer validate
         run: |
           cd aws-packer

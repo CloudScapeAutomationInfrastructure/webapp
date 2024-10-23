@@ -7,7 +7,7 @@ packer {
   }
 }
 
-  variable "region" {
+variable "region" {
   type    = string
   default = "us-east-2"
 }
@@ -38,7 +38,7 @@ variable "ssh_username" {
 }
 
 source "amazon-ebs" "ubuntu-webapp" {
-  region                      = var.region
+  region                      = varr.region
   source_ami                  = var.source_ami
   instance_type               = var.instance_type
   ssh_username                = var.ssh_username

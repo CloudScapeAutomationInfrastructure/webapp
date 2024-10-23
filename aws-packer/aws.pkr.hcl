@@ -37,8 +37,9 @@ variable "ssh_username" {
   default = "ubuntu"
 }
 variable "envfile" {
-  type    = string
+    type    = string
   default = "/home/ubuntu/.env"
+}
 
 
 

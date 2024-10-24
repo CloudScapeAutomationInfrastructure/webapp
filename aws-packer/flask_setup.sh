@@ -1,13 +1,28 @@
 #!/bin/bash
 
-# Copy the Flask app code from temp directory
+# Update the instance and install necessary packages
+sudo apt-get update -y
+sudo apt-get upgrade -y
+
+# Install Python and pip
+sudo apt-get install -y python3-pip python3-venv
+
+# Create a directory for the Flask app and move files
 sudo mkdir -p /var/www/html/api
-sudo mv /tmp/* /var/www/html/api/
 
-# Change ownership of the application artifacts and configuration files
-sudo chown -R csye6225:csye6225 /var/www/html/api
+# Move the Flask app files from /tmp to the target directory
+sudo mv /tmp/*.py /var/www/html/api/
+sudo mv /tmp/requirements.txt /var/www/html/api/
+sudo mv /home/ubuntu/.env /var/www/html/api/
 
-# Create systemd service for Flask API
+# Create a Python virtual environment in the target directory
+python3 -m venv /var/www/html/api/venv
+
+# Activate the virtual environment and install the required packages
+source /var/www/html/api/venv/bin/activate
+pip install --no-cache-dir -r /var/www/html/api/requirements.txt
+
+# Setup Flask API systemd service if required
 sudo tee /etc/systemd/system/flask-api.service <<EOL
 [Unit]
 Description=Flask API Service
@@ -23,6 +38,6 @@ ExecStart=/var/www/html/api/venv/bin/python /var/www/html/api/app.py
 WantedBy=multi-user.target
 EOL
 
-# Reload systemd and enable Flask service
+# Reload systemd to recognize the new service and enable it to start on boot
 sudo systemctl daemon-reload
 sudo systemctl enable flask-api.service

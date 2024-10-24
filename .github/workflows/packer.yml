@@ -71,4 +71,4 @@ jobs:
       - name: Build Packer image
         run: |
           cd aws-packer
-          packer build -var "envfile=${GITHUB_WORKSPACE}/api/.env" .
+          packer build -var "envfile=${GITHUB_WORKSPACE}/api/.env" aws.pkr.hcl

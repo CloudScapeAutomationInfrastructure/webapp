@@ -39,13 +39,6 @@ jobs:
           echo "DATABASE_URL=mysql+pymysql://test_user:test_password@127.0.0.1:3306/test_db" >> $GITHUB_ENV
           echo "SECRET_KEY=mysecretkey" >> $GITHUB_ENV
 
-      - name: Start Flask application
-        run: |
-          nohup python app.py &
-        env:
-          FLASK_ENV: development
-          DATABASE_URL: ${{ env.DATABASE_URL }}
-
       - name: Run pytest
         run: |
           pytest test_app.py --disable-warnings
@@ -63,6 +56,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
 
+      - name: Create .env file
+        run: |
+          mkdir -p ${GITHUB_WORKSPACE}/api
+          echo "DATABASE_URL=\"${{ secrets.DATABASE_URL }}\"" > ${GITHUB_WORKSPACE}/api/.env
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
       - name: Run Packer init
         run: |
           cd aws-packer
@@ -71,4 +71,4 @@ jobs:
       - name: Build Packer image
         run: |
           cd aws-packer
-          packer build .
+          packer build -var "envfile=${GITHUB_WORKSPACE}/api/.env" .

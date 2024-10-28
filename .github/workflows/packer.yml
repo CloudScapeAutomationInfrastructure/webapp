@@ -5,6 +5,7 @@ on:
     types: [closed]
     branches:
       - main
+      - patch1
 
 jobs:
   build-packer-image:

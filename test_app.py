@@ -45,3 +45,5 @@ def test_create_user_already_exists(client):
     
     assert response.status_code == 400
     assert response.get_json()['error'] == "User already exists"
+
+    #end of file

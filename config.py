@@ -9,3 +9,4 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY')
     S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
     AWS_REGION = os.getenv('AWS_REGION')
+#end of snippet

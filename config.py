@@ -8,3 +8,4 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SECRET_KEY = os.getenv('SECRET_KEY')
     S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
+#eof

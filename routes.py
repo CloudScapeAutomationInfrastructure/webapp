@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+import statsd
 from config import Config
 from models import User, db
 from flask_httpauth import HTTPBasicAuth
@@ -10,6 +11,10 @@ import logging
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, To, Content
 from datetime import datetime
+
+
+# Initialize StatsD client
+statsd_client = statsd.StatsClient('localhost', 8125)  # Update with the actual StatsD server host and port if different
 
 # Initialize SendGrid client
 sg = SendGridAPIClient(api_key=Config.SENDGRID_API_KEY)
@@ -41,6 +46,8 @@ def put_custom_metric(metric_name, value):
             },
         ]
     )
+    # Send metric to StatsD as well
+    statsd_client.incr(metric_name, value)
 
 # Helper function to send email using SendGrid
 def send_email(subject, content, to_email):
@@ -118,7 +125,7 @@ def create_user():
 
         logger.info(f"User {email} created successfully.")
 
-        # Push a custom metric for user creation
+        # Push custom metrics to CloudWatch and StatsD
         put_custom_metric('UserCreation', 1)
 
         return jsonify({
@@ -144,7 +151,7 @@ def get_user_info():
         if user is None:
             return jsonify({"error": "User not found"}), 404
 
-        # Push a custom metric for API call count
+        # Push custom metric to CloudWatch and StatsD for API call count
         put_custom_metric('GetUserInfo', 1)
 
         return jsonify({
@@ -177,7 +184,7 @@ def upload_image():
 
         logger.info(f"Image for user {user.email} uploaded to S3 with key {file_key}.")
 
-        # Push a custom metric for image upload
+        # Push custom metric to CloudWatch and StatsD for image upload
         put_custom_metric('ImageUpload', 1)
         
         return jsonify({"message": "Image uploaded successfully", "file_key": file_key}), 201
@@ -188,7 +195,7 @@ def upload_image():
 @user_routes.route('/healthz', methods=['GET'])
 def health_check():
     try:
-        # Push a custom metric for health check
+        # Push custom metric to CloudWatch and StatsD for health check
         put_custom_metric('HealthCheck', 1)
 
         return jsonify({"status": "healthy"}), 200

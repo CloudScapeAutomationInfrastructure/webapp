@@ -31,10 +31,13 @@ pip install --no-cache-dir -r /var/www/html/api/requirements.txt
 deactivate
 
 # Install and configure CloudWatch Agent
-# Update the package list and install the CloudWatch Agent
-sudo apt-get install -y amazon-cloudwatch-agent
+# Download the CloudWatch Agent package directly from Amazon's repository
+wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
 
-# Create CloudWatch configuration directory
+# Install the downloaded CloudWatch Agent package
+sudo dpkg -i -E ./amazon-cloudwatch-agent.deb
+
+# Create CloudWatch configuration directory if it doesn't already exist
 sudo mkdir -p /opt/aws/amazon-cloudwatch-agent/etc/
 
 # Create a basic CloudWatch configuration JSON for log collection

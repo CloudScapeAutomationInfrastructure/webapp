@@ -1,4 +1,4 @@
-from flask import Blueprint, config, request, jsonify
+from flask import Blueprint, request, jsonify
 from config import Config
 from models import User, db
 from flask_httpauth import HTTPBasicAuth
@@ -7,9 +7,11 @@ from sqlalchemy.exc import OperationalError
 import boto3
 import os
 import logging
+from datetime import datetime
 
-# Initialize S3 client
+# Initialize S3 and CloudWatch clients
 s3_client = boto3.client('s3', region_name=Config.AWS_REGION)
+cloudwatch_client = boto3.client('cloudwatch', region_name=Config.AWS_REGION)
 BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
 
 # Initialize logger
@@ -20,6 +22,20 @@ user_routes = Blueprint('user_routes', __name__, url_prefix='/v1')
 
 bcrypt = Bcrypt()
 auth = HTTPBasicAuth()
+
+# Helper function to push custom metrics to CloudWatch
+def put_custom_metric(metric_name, value):
+    cloudwatch_client.put_metric_data(
+        Namespace='WebAppMetrics',
+        MetricData=[
+            {
+                'MetricName': metric_name,
+                'Timestamp': datetime.utcnow(),
+                'Value': value,
+                'Unit': 'Count'
+            },
+        ]
+    )
 
 @auth.verify_password
 def verify_password(email, password):
@@ -80,6 +96,9 @@ def create_user():
 
         logger.info(f"User {email} created successfully.")
 
+        # Push a custom metric for user creation
+        put_custom_metric('UserCreation', 1)
+
         return jsonify({
             "email": new_user.email,
             "first_name": new_user.first_name,
@@ -102,6 +121,9 @@ def get_user_info():
         user = auth.current_user()
         if user is None:
             return jsonify({"error": "User not found"}), 404
+
+        # Push a custom metric for API call count
+        put_custom_metric('GetUserInfo', 1)
 
         return jsonify({
             "email": user.email,
@@ -132,6 +154,9 @@ def upload_image():
         s3_client.upload_fileobj(image_file, BUCKET_NAME, file_key)
 
         logger.info(f"Image for user {user.email} uploaded to S3 with key {file_key}.")
+
+        # Push a custom metric for image upload
+        put_custom_metric('ImageUpload', 1)
         
         return jsonify({"message": "Image uploaded successfully", "file_key": file_key}), 201
     except Exception as e:
@@ -141,6 +166,9 @@ def upload_image():
 @user_routes.route('/healthz', methods=['GET'])
 def health_check():
     try:
+        # Push a custom metric for health check
+        put_custom_metric('HealthCheck', 1)
+
         return jsonify({"status": "healthy"}), 200
     except OperationalError as e:
         logger.error(f"Database Error: {str(e)}")

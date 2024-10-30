@@ -8,7 +8,7 @@ import os
 import logging
 
 # Initialize S3 client
-s3_client = boto3.client('s3')
+s3_client = boto3.client('s3',region_name='us-east-2')
 BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
 
 # Initialize logger

@@ -21,3 +21,4 @@ python-dotenv
 pymysql
 cryptography
 boto3
+watchtower

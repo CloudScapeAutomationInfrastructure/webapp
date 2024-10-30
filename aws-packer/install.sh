@@ -29,3 +29,32 @@ pip install --no-cache-dir -r /var/www/html/api/requirements.txt
 
 # Deactivate the virtual environment
 deactivate
+
+# Install and configure CloudWatch Agent
+# Update the package list and install the CloudWatch Agent
+sudo apt-get install -y amazon-cloudwatch-agent
+
+# Create CloudWatch configuration directory
+sudo mkdir -p /opt/aws/amazon-cloudwatch-agent/etc/
+
+# Create a basic CloudWatch configuration JSON for log collection
+cat <<EOF | sudo tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/syslog",
+            "log_group_name": "webapp-syslog",
+            "log_stream_name": "{instance_id}"
+          }
+        ]
+      }
+    }
+  }
+}
+EOF
+
+# Start the CloudWatch Agent with the specified configuration
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a start -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json

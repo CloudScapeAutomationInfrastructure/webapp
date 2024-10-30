@@ -1,3 +1,4 @@
+# Updated Packer template without the separate CloudWatch provisioner
 packer {
   required_plugins {
     amazon = {
@@ -36,13 +37,12 @@ variable "ssh_username" {
   type    = string
   default = "ubuntu"
 }
+
 variable "envfile" {
   type    = string
   default = "./install.sh"
 }
 
-
-# New variable for the additional AWS account ID to share the AMI with
 variable "additional_user" {
   type    = string
   default = "311141531170"
@@ -66,10 +66,14 @@ source "amazon-ebs" "ubuntu-webapp" {
 
 build {
   sources = ["source.amazon-ebs.ubuntu-webapp"]
-    provisioner "file" {
-    source      = var.envfile  # The path passed from GitHub Actions
-    destination = "/home/ubuntu/.env"  # Destination inside the instance/AMI
+
+  # Upload environment file
+  provisioner "file" {
+    source      = var.envfile
+    destination = "/home/ubuntu/.env"
   }
+
+  # Upload application files
   provisioner "file" {
     source      = "../app.py"
     destination = "/tmp/"
@@ -98,14 +102,13 @@ build {
     source      = "../requirements.txt"
     destination = "/tmp/"
   }
-   provisioner "file" {
-    source      = var.envfile  # Path where the .env is created during GitHub Actions
-    destination = "/home/ubuntu/.env"  # Target path inside the instance/AMI
-  }
+
+  # Run install script
   provisioner "shell" {
     script = "install.sh"
   }
 
+  # Set up Flask application
   provisioner "shell" {
     script = "flask_setup.sh"
   }
@@ -114,6 +117,4 @@ build {
     output     = "manifest.json"
     strip_path = true
   }
-
 }
-#eof

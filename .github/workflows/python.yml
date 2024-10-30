@@ -37,8 +37,9 @@ jobs:
 
       - name: Set up environment variables
         run: |
-          echo "DATABASE_URL=mysql+pymysql://test_user:test_password@127.0.0.1:3306/test_db" >> $GITHUB_ENV
-          echo "SECRET_KEY=mysecretkey" >> $GITHUB_ENV
+          echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> $GITHUB_ENV
+          echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> $GITHUB_ENV
+          echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> $GITHUB_ENV
 
       - name: Run pytest
         run: |
@@ -48,8 +49,6 @@ jobs:
         run: |
           cd aws-packer
           packer init .
-
-      
 
       - name: Run Packer validate
         run: |

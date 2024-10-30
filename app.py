@@ -7,6 +7,9 @@ import logging
 from watchtower import CloudWatchLogHandler
 import boto3
 
+# Set the default boto3 session to include the region
+boto3.setup_default_session(region_name=Config.AWS_REGION)
+
 # Initialize the Flask application
 app = Flask(__name__)
 bcrypt = Bcrypt(app)
@@ -24,12 +27,8 @@ app.register_blueprint(user_routes)
 logger = logging.getLogger("flask-app")
 logger.setLevel(logging.INFO)
 
-# Explicitly set the region for CloudWatchLogHandler
-cloudwatch_handler = CloudWatchLogHandler(
-    log_group="webappLogGroup",
-    stream_name="FlaskAppLogs",
-    boto3_session=boto3.Session(region_name=Config.AWS_REGION)  # Pass the region here
-)
+# Create a CloudWatch handler for logging
+cloudwatch_handler = CloudWatchLogHandler(log_group="webappLogGroup", stream_name="FlaskAppLogs")
 cloudwatch_handler.setLevel(logging.INFO)
 
 # Add CloudWatch handler to logger

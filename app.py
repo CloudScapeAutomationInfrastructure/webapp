@@ -5,6 +5,7 @@ from routes import user_routes
 from config import Config  
 import logging
 from watchtower import CloudWatchLogHandler
+import boto3
 
 # Initialize the Flask application
 app = Flask(__name__)
@@ -23,8 +24,12 @@ app.register_blueprint(user_routes)
 logger = logging.getLogger("flask-app")
 logger.setLevel(logging.INFO)
 
-# Create a CloudWatch handler for logging
-cloudwatch_handler = CloudWatchLogHandler(log_group="webappLogGroup", stream_name="FlaskAppLogs")
+# Explicitly set the region for CloudWatchLogHandler
+cloudwatch_handler = CloudWatchLogHandler(
+    log_group="webappLogGroup",
+    stream_name="FlaskAppLogs",
+    boto3_session=boto3.Session(region_name=Config.AWS_REGION)  # Pass the region here
+)
 cloudwatch_handler.setLevel(logging.INFO)
 
 # Add CloudWatch handler to logger
@@ -38,6 +43,4 @@ with app.app_context():
     db.create_all()
 
 if __name__ == '__main__':
-    # Run the application
-    app.run(host='0.0.0.0', port=5001, debug=True)  
-#eof
+    app.run(host='0.0.0.0', port=5001, debug=True)

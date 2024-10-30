@@ -1,4 +1,5 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, config, request, jsonify
+from config import Config
 from models import User, db
 from flask_httpauth import HTTPBasicAuth
 from flask_bcrypt import Bcrypt

@@ -24,7 +24,7 @@ Python dependencies:
 - `mysql-connector-python`
 - `python-dotenv`
 
-Install dependencies using the following command:
+Install all dependencies using the following command:
 
 ```bash
 pip install -r requirements.txt

@@ -7,7 +7,12 @@ from sqlalchemy.exc import OperationalError
 import boto3
 import os
 import logging
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail, Email, To, Content
 from datetime import datetime
+
+# Initialize SendGrid client
+sg = SendGridAPIClient(api_key=Config.SENDGRID_API_KEY)
 
 # Initialize S3 and CloudWatch clients
 s3_client = boto3.client('s3', region_name=Config.AWS_REGION)
@@ -36,6 +41,20 @@ def put_custom_metric(metric_name, value):
             },
         ]
     )
+
+# Helper function to send email using SendGrid
+def send_email(subject, content, to_email):
+    from_email = Email(Config.FROM_EMAIL)
+    to_email = To(to_email)
+    reply_to_email = Email(Config.REPLY_TO_EMAIL)
+    content = Content("text/plain", content)
+    mail = Mail(from_email, to_email, subject, content)
+    mail.reply_to = reply_to_email
+    try:
+        response = sg.client.mail.send.post(request_body=mail.get())
+        logger.info(f"Email sent to {to_email} with status code {response.status_code}")
+    except Exception as e:
+        logger.error(f"Failed to send email: {str(e)}")
 
 @auth.verify_password
 def verify_password(email, password):
@@ -93,6 +112,9 @@ def create_user():
 
         db.session.add(new_user)
         db.session.commit()
+
+        # Send a welcome email
+        send_email("Welcome to WebApp!", "Thank you for registering!", email)
 
         logger.info(f"User {email} created successfully.")
 

@@ -1,11 +1,13 @@
 from flask import Flask
 from flask_bcrypt import Bcrypt
 from models import db
-from routes import user_routes  
-from config import Config  
+from routes import user_routes
+from config import Config
 import logging
 from watchtower import CloudWatchLogHandler
 import boto3
+from sendgrid import SendGridAPIClient
+import os
 
 # Set the default boto3 session to include the region
 boto3.setup_default_session(region_name=Config.AWS_REGION)
@@ -36,6 +38,9 @@ logger.addHandler(cloudwatch_handler)
 
 # Log a startup message
 logger.info("Flask application has started.")
+
+# Initialize SendGrid client
+sendgrid_client = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))
 
 with app.app_context():
     # Create all database tables if they don't exist

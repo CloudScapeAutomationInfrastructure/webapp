@@ -9,4 +9,4 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY')
     S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
 
-#This is config file
+#This is config file that contains the configuration settings for the Flask application. The Config class contains the following configuration settings:

@@ -1,4 +1,3 @@
-# Updated Packer template without the separate CloudWatch provisioner
 packer {
   required_plugins {
     amazon = {
@@ -67,13 +66,13 @@ source "amazon-ebs" "ubuntu-webapp" {
 build {
   sources = ["source.amazon-ebs.ubuntu-webapp"]
 
-  # Upload environment file
+  
   provisioner "file" {
     source      = var.envfile
     destination = "/home/ubuntu/.env"
   }
 
-  # Upload application files
+  
   provisioner "file" {
     source      = "../app.py"
     destination = "/tmp/"
@@ -103,12 +102,12 @@ build {
     destination = "/tmp/"
   }
 
-  # Run install script
+
   provisioner "shell" {
     script = "install.sh"
   }
 
-  # Set up Flask application
+  
   provisioner "shell" {
     script = "flask_setup.sh"
   }

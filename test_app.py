@@ -2,7 +2,7 @@ import json
 from io import BytesIO
 from base64 import b64encode
 import pytest
-from moto import mock_s3
+from moto import mock_aws  # Updated import
 import boto3
 import os
 
@@ -15,7 +15,7 @@ def auth_headers():
 
 @pytest.fixture(scope='function')
 def s3_mock():
-    with mock_s3():
+    with mock_aws():  # Updated from mock_s3 to mock_aws
         s3 = boto3.client('s3', region_name='us-east-1')
         bucket_name = os.getenv('S3_BUCKET_NAME', 'test-bucket')
         s3.create_bucket(Bucket=bucket_name)

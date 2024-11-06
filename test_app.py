@@ -1,7 +1,7 @@
 import json
 from io import BytesIO
 import pytest
-from moto import mock_s3  # Use mock_s3 instead of mock_aws
+from moto.core import mock_s3  # Use mock_s3 instead of mock_aws
 import boto3
 from config import Config
 

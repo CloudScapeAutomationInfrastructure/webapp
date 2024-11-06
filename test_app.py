@@ -2,7 +2,7 @@ import json
 from io import BytesIO
 from base64 import b64encode
 import pytest
-from moto import mock_aws  # Updated import
+from moto import mock_s3
 import boto3
 import os
 
@@ -14,11 +14,12 @@ def auth_headers():
     }
 
 @pytest.fixture(scope='function')
-def s3_mock():
-    with mock_aws():  # Updated from mock_s3 to mock_aws
+def s3_mock(monkeypatch):
+    with mock_s3():
         s3 = boto3.client('s3', region_name='us-east-1')
-        bucket_name = os.getenv('S3_BUCKET_NAME', 'test-bucket')
+        bucket_name = os.getenv('S3_BUCKET_NAME', 'image-upload-s3-bucket-123')
         s3.create_bucket(Bucket=bucket_name)
+        monkeypatch.setenv('S3_BUCKET_NAME', bucket_name)
         yield
 
 def test_create_user_success(client, s3_mock):
@@ -66,6 +67,16 @@ def test_create_user_already_exists(client, s3_mock):
     assert response.get_json()['error'] == "User already exists"
 
 def test_get_user_success(client, auth_headers, s3_mock):
+    # First, create the user for authentication
+    payload = {
+        "email": "test@example.com",
+        "password": "strongpassword",
+        "first_name": "Test",
+        "last_name": "User"
+    }
+    client.post('/v1/user', data=payload, content_type='multipart/form-data')
+
+    # Now retrieve the user profile with authentication headers
     response = client.get('/v1/user/self', headers=auth_headers)
     assert response.status_code == 200
     response_data = response.get_json()

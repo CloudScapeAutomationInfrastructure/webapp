@@ -1,7 +1,7 @@
 blinker==1.8.2
 click==8.1.7
 colorama==0.4.6
-Flask==3.0.3
+Flask==2.2.5  # Compatible with Werkzeug<2.2.0
 greenlet==3.1.1
 itsdangerous==2.2.0
 Jinja2==3.1.4
@@ -10,7 +10,7 @@ mysql-connector-python==9.0.0
 pip==24.2
 SQLAlchemy==2.0.35
 typing_extensions==4.12.2
-Werkzeug==3.0.4
+Werkzeug==2.1.2  # Compatible with moto
 pytest==8.3.3
 fastapi
 requests

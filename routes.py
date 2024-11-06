@@ -27,6 +27,13 @@ user_routes = Blueprint('user_routes', __name__, url_prefix='/v1')
 bcrypt = Bcrypt()
 auth = HTTPBasicAuth()
 
+@auth.verify_password
+def verify_password(email, password):
+    user = User.query.filter_by(email=email).first()
+    if user and bcrypt.check_password_hash(user.password, password):
+        return user
+    return None
+
 def put_custom_metric(metric_name, value):
     cloudwatch_client.put_metric_data(
         Namespace='WebAppMetrics',
@@ -54,7 +61,7 @@ def send_email(subject, content, to_email):
     except Exception as e:
         logger.error(f"Failed to send email: {str(e)}")
 
-@user_routes.route('/v1/user', methods=['POST'])
+@user_routes.route('/user', methods=['POST'])
 def create_user():
     try:
         data = request.form
@@ -99,7 +106,7 @@ def create_user():
         logger.error(f"Error: {str(e)}")
         return jsonify({"error": "An internal server error occurred"}), 500
 
-@user_routes.route('/v1/user', methods=['GET'])
+@user_routes.route('/user', methods=['GET'])
 @auth.login_required
 def get_user():
     try:
@@ -115,7 +122,7 @@ def get_user():
         logger.error(f"Failed to retrieve user: {str(e)}")
         return jsonify({"error": "Failed to retrieve user"}), 500
 
-@user_routes.route('/v1/user/self/pic', methods=['DELETE'])
+@user_routes.route('/user/self/pic', methods=['DELETE'])
 @auth.login_required
 def delete_image():
     try:
@@ -138,7 +145,7 @@ def delete_image():
         send_email("Image Deletion Failed", f"Your image deletion failed due to an error: {str(e)}", user.email)
         return jsonify({"error": "Failed to delete image"}), 500
 
-@user_routes.route('/v1/healthz', methods=['GET'])
+@user_routes.route('/healthz', methods=['GET'])
 def health_check():
     try:
         put_custom_metric('HealthCheck', 1)

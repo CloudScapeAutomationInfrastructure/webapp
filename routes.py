@@ -61,7 +61,7 @@ def send_email(subject, content, to_email):
 @user_routes.route('/user', methods=['POST'])
 def create_user():
     try:
-        data = request.form
+        data = request.json
         required_fields = ['email', 'password', 'first_name', 'last_name']
         missing_fields = [field for field in required_fields if not data.get(field)]
         if missing_fields:

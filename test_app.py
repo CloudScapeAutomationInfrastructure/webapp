@@ -1,11 +1,11 @@
 import json
 from io import BytesIO
 import pytest
-from moto import mock_s3
+from moto import mock_aws
 import boto3
 from config import Config
 
-@mock_s3
+@mock_aws
 def test_create_user_success(client):
     # Set up the mock S3 environment
     s3_client = boto3.client('s3', region_name=Config.AWS_REGION)
@@ -40,7 +40,7 @@ def test_create_user_success(client):
     assert 'account_created' in response_data
     assert 'account_updated' in response_data
 
-@mock_s3
+@mock_aws
 def test_create_user_already_exists(client):
     # Set up the mock S3 environment
     s3_client = boto3.client('s3', region_name=Config.AWS_REGION)

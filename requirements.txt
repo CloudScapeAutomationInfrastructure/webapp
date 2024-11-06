@@ -24,4 +24,4 @@ boto3
 watchtower
 sendgrid
 statsd
-moto
+moto==4.0.0

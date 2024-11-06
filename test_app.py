@@ -1,71 +1,75 @@
 import json
 from io import BytesIO
-import pytest
-from moto.core import mock_s3  # Use mock_s3 instead of mock_aws
-import boto3
-from config import Config
 
-@mock_s3
 def test_create_user_success(client):
-    # Set up the mock S3 environment
-    s3_client = boto3.client('s3', region_name=Config.AWS_REGION)
-    s3_client.create_bucket(Bucket=Config.S3_BUCKET_NAME)  # Ensure the bucket exists
-
-    # Form data payload
-    data = {
+    # User data payload
+    payload = {
         "email": "test@example.com",
         "password": "strongpassword",
         "first_name": "Test",
         "last_name": "User"
     }
 
-    # Simulate an image file upload
-    data_with_file = {
-        **data,
-        "file": (BytesIO(b"fake image content"), "test_image.jpg")
-    }
+    # Create a sample image file to upload
+    image_data = BytesIO(b"test image data")
+    image_data.name = "test_image.jpg"  # Simulate a file name
 
-    # Send the POST request as form data with a file
+    # Send POST request with data and file
     response = client.post(
         '/v1/user',
-        data=data_with_file,
+        data={
+            **payload,  # Unpack the payload dictionary
+            "file": (image_data, "test_image.jpg")
+        },
         content_type='multipart/form-data'
     )
 
+    # Validate the response
     assert response.status_code == 201
+
     response_data = response.get_json()
+
+    # Check returned data fields
     assert response_data['email'] == "test@example.com"
     assert response_data['first_name'] == "Test"
     assert response_data['last_name'] == "User"
     assert 'account_created' in response_data
     assert 'account_updated' in response_data
 
-@mock_s3
-def test_create_user_already_exists(client):
-    # Set up the mock S3 environment
-    s3_client = boto3.client('s3', region_name=Config.AWS_REGION)
-    s3_client.create_bucket(Bucket=Config.S3_BUCKET_NAME)  # Ensure the bucket exists
 
-    data = {
+def test_create_user_already_exists(client):
+    # User data payload
+    payload = {
         "email": "test@example.com",
         "password": "strongpassword",
         "first_name": "Test",
         "last_name": "User"
     }
 
-    # First request to create the user
-    response = client.post(
-        '/v1/user',
-        data=data,
-        content_type='multipart/form-data'
-    )
-    assert response.status_code == 201
+    # First request to create user
+    response = client.post('/v1/user', data=payload, content_type='multipart/form-data')
+    assert response.status_code == 201  
 
-    # Second request with the same email to trigger the "User already exists" error
-    response = client.post(
-        '/v1/user',
-        data=data,
-        content_type='multipart/form-data'
-    )
+    # Second request with the same payload to check duplicate user creation
+    response = client.post('/v1/user', data=payload, content_type='multipart/form-data')
+
+    # Validate the response for duplicate user
     assert response.status_code == 400
     assert response.get_json()['error'] == "User already exists"
+
+
+def test_get_user_success(client, auth_headers):
+    # Assume user has been created and `auth_headers` provides valid authentication headers
+
+    response = client.get('/v1/user/self', headers=auth_headers)
+
+    # Validate the response
+    assert response.status_code == 200
+    response_data = response.get_json()
+
+    # Check returned data fields
+    assert response_data['email'] == "test@example.com"
+    assert response_data['first_name'] == "Test"
+    assert response_data['last_name'] == "User"
+    assert 'account_created' in response_data
+    assert 'account_updated' in response_data

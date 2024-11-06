@@ -13,13 +13,10 @@ from sendgrid.helpers.mail import Mail, Email, To, Content
 from datetime import datetime
 
 statsd_client = statsd.StatsClient('localhost', 8125)
-
 sg = SendGridAPIClient(api_key=Config.SENDGRID_API_KEY)
-
 s3_client = boto3.client('s3', region_name=Config.AWS_REGION)
 cloudwatch_client = boto3.client('cloudwatch', region_name=Config.AWS_REGION)
 BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
-
 logger = logging.getLogger("flask-app")
 
 user_routes = Blueprint('user_routes', __name__, url_prefix='/v1')
@@ -85,7 +82,9 @@ def create_user():
         if image_file:
             file_key = f"{new_user.id}/{image_file.filename}"
             s3_client.upload_fileobj(image_file, BUCKET_NAME, file_key)
-            logger.info(f"Image for user {new_user.email} uploaded to S3 with key {file_key}")
+            logger.info(f"Image for user {email} uploaded to S3 with key {file_key}")
+            send_email("Image Upload Successful", f"Your image has been successfully uploaded with key {file_key}.", email)
+            put_custom_metric('ImageUpload', 1)
 
         send_email("Welcome to WebApp!", "Thank you for registering!", email)
         logger.info(f"User {email} created successfully.")
@@ -106,21 +105,54 @@ def create_user():
         logger.error(f"Error: {str(e)}")
         return jsonify({"error": "An internal server error occurred"}), 500
 
-@user_routes.route('/user', methods=['GET'])
+@user_routes.route('/user/self', methods=['GET'])
 @auth.login_required
 def get_user():
     try:
         user = auth.current_user()
-        return jsonify({
+        
+        # Fetch user data
+        user_data = {
             "email": user.email,
             "first_name": user.first_name,
             "last_name": user.last_name,
             "account_created": user.account_created,
             "account_updated": user.account_updated
-        }), 200
+        }
+        
+        logger.info(f"User {user.email} retrieved their profile data.")
+        put_custom_metric('UserProfileFetch', 1)
+        
+        return jsonify(user_data), 200
+
     except Exception as e:
-        logger.error(f"Failed to retrieve user: {str(e)}")
-        return jsonify({"error": "Failed to retrieve user"}), 500
+        logger.error(f"Failed to retrieve user profile: {str(e)}")
+        return jsonify({"error": "Failed to retrieve user profile"}), 500
+
+@user_routes.route('/user/self/pic', methods=['POST'])
+@auth.login_required
+def upload_image():
+    try:
+        user = auth.current_user()
+        image_file = request.files.get('file')
+
+        if not image_file:
+            send_email("Image Upload Failed", "No image file was provided for upload.", user.email)
+            return jsonify({"error": "No image file provided"}), 400
+
+        file_key = f"{user.id}/{image_file.filename}"
+        s3_client.upload_fileobj(image_file, BUCKET_NAME, file_key)
+        logger.info(f"Image for user {user.email} uploaded to S3 with key {file_key}")
+
+        put_custom_metric('ImageUpload', 1)
+        send_email("Image Upload Successful", f"Your image has been successfully uploaded with key {file_key}.", user.email)
+
+        return jsonify({"message": "Image uploaded successfully", "file_key": file_key}), 201
+
+    except Exception as e:
+        logger.error(f"Failed to upload image: {str(e)}")
+        send_email("Image Upload Failed", f"Your image upload failed due to an error: {str(e)}", user.email)
+        return jsonify({"error": "Failed to upload image"}), 500
 
 @user_routes.route('/user/self/pic', methods=['DELETE'])
 @auth.login_required

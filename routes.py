@@ -77,15 +77,6 @@ def create_user():
         db.session.add(new_user)
         db.session.commit()
 
-        # Handle image upload
-        image_file = request.files.get('file')
-        if image_file:
-            file_key = f"{new_user.id}/{image_file.filename}"
-            s3_client.upload_fileobj(image_file, BUCKET_NAME, file_key)
-            logger.info(f"Image for user {email} uploaded to S3 with key {file_key}")
-            send_email("Image Upload Successful", f"Your image has been successfully uploaded with key {file_key}.", email)
-            put_custom_metric('ImageUpload', 1)
-
         send_email("Welcome to WebApp!", "Thank you for registering!", email)
         logger.info(f"User {email} created successfully.")
         put_custom_metric('UserCreation', 1)
@@ -111,7 +102,6 @@ def get_user():
     try:
         user = auth.current_user()
         
-        # Fetch user data
         user_data = {
             "email": user.email,
             "first_name": user.first_name,

@@ -1,7 +1,16 @@
 import json
 from io import BytesIO
+import pytest
+from moto import mock_s3
+import boto3
+from config import Config
 
+@mock_s3
 def test_create_user_success(client):
+    # Set up the mock S3 environment
+    s3_client = boto3.client('s3', region_name=Config.AWS_REGION)
+    s3_client.create_bucket(Bucket=Config.S3_BUCKET_NAME)  # Ensure the bucket exists
+
     # Form data payload
     data = {
         "email": "test@example.com",
@@ -18,7 +27,7 @@ def test_create_user_success(client):
 
     # Send the POST request as form data with a file
     response = client.post(
-        '/v1/user', 
+        '/v1/user',
         data=data_with_file,
         content_type='multipart/form-data'
     )
@@ -31,8 +40,12 @@ def test_create_user_success(client):
     assert 'account_created' in response_data
     assert 'account_updated' in response_data
 
-
+@mock_s3
 def test_create_user_already_exists(client):
+    # Set up the mock S3 environment
+    s3_client = boto3.client('s3', region_name=Config.AWS_REGION)
+    s3_client.create_bucket(Bucket=Config.S3_BUCKET_NAME)  # Ensure the bucket exists
+
     data = {
         "email": "test@example.com",
         "password": "strongpassword",
@@ -42,7 +55,7 @@ def test_create_user_already_exists(client):
 
     # First request to create the user
     response = client.post(
-        '/v1/user', 
+        '/v1/user',
         data=data,
         content_type='multipart/form-data'
     )
@@ -50,7 +63,7 @@ def test_create_user_already_exists(client):
 
     # Second request with the same email to trigger the "User already exists" error
     response = client.post(
-        '/v1/user', 
+        '/v1/user',
         data=data,
         content_type='multipart/form-data'
     )

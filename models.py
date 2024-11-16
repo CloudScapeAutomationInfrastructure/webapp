@@ -13,6 +13,7 @@ class User(db.Model):
     last_name = db.Column(db.String(50), nullable=False)
     account_created = db.Column(db.DateTime, default=datetime.utcnow)
     account_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    verified = db.Column(db.Boolean, default=False)
 
     def set_password(self, password):
         self.password = bcrypt.generate_password_hash(password).decode('utf-8')

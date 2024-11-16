@@ -1,3 +1,5 @@
+import boto3
+import json
 from flask import Blueprint, request, jsonify
 import statsd
 from config import Config
@@ -5,22 +7,25 @@ from models import User, db
 from flask_httpauth import HTTPBasicAuth
 from flask_bcrypt import Bcrypt
 from sqlalchemy.exc import OperationalError
-import boto3
 import os
 import logging
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, To, Content
 from datetime import datetime
 
+# Initialize clients and configurations
 statsd_client = statsd.StatsClient('localhost', 8125)
 sg = SendGridAPIClient(api_key=Config.SENDGRID_API_KEY)
 s3_client = boto3.client('s3', region_name=Config.AWS_REGION)
+sns_client = boto3.client('sns', region_name=Config.AWS_REGION)
 cloudwatch_client = boto3.client('cloudwatch', region_name=Config.AWS_REGION)
 BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
 logger = logging.getLogger("flask-app")
 
+# Blueprint for user routes
 user_routes = Blueprint('user_routes', __name__, url_prefix='/v1')
 
+# Bcrypt and HTTPAuth for authentication
 bcrypt = Bcrypt()
 auth = HTTPBasicAuth()
 
@@ -31,6 +36,7 @@ def verify_password(email, password):
         return user
     return None
 
+# Helper methods
 def put_custom_metric(metric_name, value):
     cloudwatch_client.put_metric_data(
         Namespace='WebAppMetrics',
@@ -58,6 +64,7 @@ def send_email(subject, content, to_email):
     except Exception as e:
         logger.error(f"Failed to send email: {str(e)}")
 
+# Create User Endpoint
 @user_routes.route('/user', methods=['POST'])
 def create_user():
     try:
@@ -73,20 +80,33 @@ def create_user():
             return jsonify({"error": "User already exists"}), 400
 
         hashed_password = bcrypt.generate_password_hash(data['password']).decode('utf-8')
-        new_user = User(email=email, password=hashed_password, first_name=data['first_name'], last_name=data['last_name'])
+        new_user = User(
+            email=email,
+            password=hashed_password,
+            first_name=data['first_name'],
+            last_name=data['last_name'],
+            verified=False  # Initially set as unverified
+        )
         db.session.add(new_user)
         db.session.commit()
 
-        send_email("Welcome to WebApp!", "Thank you for registering!", email)
-        logger.info(f"User {email} created successfully.")
+        # Publish to SNS topic
+        sns_client.publish(
+            TopicArn=Config.SNS_TOPIC_ARN,
+            Message=json.dumps({
+                "email": email,
+                "first_name": data['first_name'],
+                "last_name": data['last_name'],
+                "user_id": new_user.id
+            }),
+            Subject="User Created Notification"
+        )
+
+        logger.info(f"User {email} created successfully and notification sent to SNS.")
         put_custom_metric('UserCreation', 1)
 
         return jsonify({
-            "email": new_user.email,
-            "first_name": new_user.first_name,
-            "last_name": new_user.last_name,
-            "account_created": new_user.account_created,
-            "account_updated": new_user.account_updated
+            "message": "User created successfully. Verification email sent."
         }), 201
 
     except OperationalError as e:

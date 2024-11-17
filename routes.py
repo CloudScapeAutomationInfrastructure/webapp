@@ -68,6 +68,7 @@ def send_email(subject, content, to_email):
 @user_routes.route('/user', methods=['POST'])
 def create_user():
     try:
+        # Parse incoming data
         data = request.json
         required_fields = ['email', 'password', 'first_name', 'last_name']
         missing_fields = [field for field in required_fields if not data.get(field)]
@@ -75,45 +76,54 @@ def create_user():
             return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
 
         email = data.get('email')
-        if User.query.filter_by(email=email).first():
-            send_email("User Already Exists", "The email you tried to register with is already in use.", email)
+        password = data.get('password')
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+
+        # Check if user already exists
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            logger.info(f"Attempt to create a user with an existing email: {email}")
             return jsonify({"error": "User already exists"}), 400
 
-        hashed_password = bcrypt.generate_password_hash(data['password']).decode('utf-8')
+        # Hash password
+        hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
+
+        # Create new user
         new_user = User(
             email=email,
             password=hashed_password,
-            first_name=data['first_name'],
-            last_name=data['last_name'],
-            verified=False  # Initially set as unverified
+            first_name=first_name,
+            last_name=last_name,
+            verified=False  # Default verified status
         )
         db.session.add(new_user)
         db.session.commit()
 
         # Publish to SNS topic
+        sns_message = {
+            "email": email,
+            "user_id": new_user.id,
+            "first_name": first_name,
+            "last_name": last_name
+        }
         sns_client.publish(
-            TopicArn=Config.SNS_TOPIC_ARN,
-            Message=json.dumps({
-                "email": email,
-                "first_name": data['first_name'],
-                "last_name": data['last_name'],
-                "user_id": new_user.id
-            }),
-            Subject="User Created Notification"
+            TopicArn=Config.SNS_TOPIC_ARN,  # Replace with your actual SNS Topic ARN
+            Message=json.dumps(sns_message),
+            Subject="New User Registration Notification"
         )
 
-        logger.info(f"User {email} created successfully and notification sent to SNS.")
+        # Log and update metrics
+        logger.info(f"User {email} created successfully.")
         put_custom_metric('UserCreation', 1)
 
         return jsonify({
-            "message": "User created successfully. Verification email sent."
+            "message": "User created successfully. Verification email sent.",
+            "user_id": new_user.id
         }), 201
 
-    except OperationalError as e:
-        logger.error(f"Database Error: {str(e)}")
-        return jsonify({"error": "Service Unavailable"}), 503
     except Exception as e:
-        logger.error(f"Error: {str(e)}")
+        logger.error(f"Error during user creation: {str(e)}")
         return jsonify({"error": "An internal server error occurred"}), 500
 
 @user_routes.route('/user/self', methods=['GET'])

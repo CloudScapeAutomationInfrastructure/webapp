@@ -133,9 +133,17 @@ def create_user():
 @user_routes.route('/user/self', methods=['GET'])
 @auth.login_required
 def get_user():
+    """
+    Get user profile information.
+    Block access for unverified users.
+    """
     try:
         user = auth.current_user()
         
+        # Check if user is verified
+        if not is_user_verified(user):
+            return jsonify({"error": "Access denied. Verify your email to access this resource."}), 403
+
         user_data = {
             "email": user.email,
             "first_name": user.first_name,
@@ -153,13 +161,22 @@ def get_user():
         logger.error(f"Failed to retrieve user profile: {str(e)}")
         return jsonify({"error": "Failed to retrieve user profile"}), 500
 
+
 @user_routes.route('/user/self/pic', methods=['POST'])
 @auth.login_required
 def upload_image():
+    """
+    Upload an image for the user.
+    Block access for unverified users.
+    """
     try:
         user = auth.current_user()
-        image_file = request.files.get('file')
+        
+        # Check if user is verified
+        if not is_user_verified(user):
+            return jsonify({"error": "Access denied. Verify your email to access this resource."}), 403
 
+        image_file = request.files.get('file')
         if not image_file:
             send_email("Image Upload Failed", "No image file was provided for upload.", user.email)
             return jsonify({"error": "No image file provided"}), 400
@@ -178,13 +195,22 @@ def upload_image():
         send_email("Image Upload Failed", f"Your image upload failed due to an error: {str(e)}", user.email)
         return jsonify({"error": "Failed to upload image"}), 500
 
+
 @user_routes.route('/user/self/pic', methods=['DELETE'])
 @auth.login_required
 def delete_image():
+    """
+    Delete an uploaded image.
+    Block access for unverified users.
+    """
     try:
         user = auth.current_user()
-        image_key = request.args.get('file_key')
 
+        # Check if user is verified
+        if not is_user_verified(user):
+            return jsonify({"error": "Access denied. Verify your email to access this resource."}), 403
+
+        image_key = request.args.get('file_key')
         if not image_key:
             return jsonify({"error": "file_key is required to delete an image"}), 400
 

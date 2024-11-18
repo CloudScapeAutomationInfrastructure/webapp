@@ -44,10 +44,12 @@ jobs:
 
       - name: Set up environment variables
         run: |
+          echo "TEST_ENV=true" >> $GITHUB_ENV
           echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> $GITHUB_ENV
           echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> $GITHUB_ENV
           echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> $GITHUB_ENV
           echo "S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}" >> $GITHUB_ENV
+          echo "SNS_TOPIC_ARN=${{ secrets.SNS_TOPIC_ARN }}" >> $GITHUB_ENV
 
       - name: Create .env file
         run: |
@@ -56,6 +58,7 @@ jobs:
           echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> ${GITHUB_WORKSPACE}/api/.env
           echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> ${GITHUB_WORKSPACE}/api/.env
           echo "S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}" >> ${GITHUB_WORKSPACE}/api/.env
+          echo "SNS_TOPIC_ARN=${{ secrets.SNS_TOPIC_ARN }}" >> ${GITHUB_WORKSPACE}/api/.env
 
       - name: Run pytest
         run: |

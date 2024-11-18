@@ -1,3 +1,5 @@
+import boto3
+import json
 from flask import Blueprint, request, jsonify
 import statsd
 from config import Config
@@ -5,22 +7,25 @@ from models import User, db
 from flask_httpauth import HTTPBasicAuth
 from flask_bcrypt import Bcrypt
 from sqlalchemy.exc import OperationalError
-import boto3
 import os
 import logging
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, To, Content
 from datetime import datetime
 
+# Initialize clients and configurations
 statsd_client = statsd.StatsClient('localhost', 8125)
 sg = SendGridAPIClient(api_key=Config.SENDGRID_API_KEY)
 s3_client = boto3.client('s3', region_name=Config.AWS_REGION)
+sns_client = boto3.client('sns', region_name=Config.AWS_REGION)
 cloudwatch_client = boto3.client('cloudwatch', region_name=Config.AWS_REGION)
 BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
 logger = logging.getLogger("flask-app")
 
+# Blueprint for user routes
 user_routes = Blueprint('user_routes', __name__, url_prefix='/v1')
 
+# Bcrypt and HTTPAuth for authentication
 bcrypt = Bcrypt()
 auth = HTTPBasicAuth()
 
@@ -31,6 +36,7 @@ def verify_password(email, password):
         return user
     return None
 
+# Helper methods
 def put_custom_metric(metric_name, value):
     cloudwatch_client.put_metric_data(
         Namespace='WebAppMetrics',
@@ -58,9 +64,11 @@ def send_email(subject, content, to_email):
     except Exception as e:
         logger.error(f"Failed to send email: {str(e)}")
 
+# Create User Endpoint
 @user_routes.route('/user', methods=['POST'])
 def create_user():
     try:
+        # Parse incoming data
         data = request.json
         required_fields = ['email', 'password', 'first_name', 'last_name']
         missing_fields = [field for field in required_fields if not data.get(field)]
@@ -68,32 +76,58 @@ def create_user():
             return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
 
         email = data.get('email')
-        if User.query.filter_by(email=email).first():
-            send_email("User Already Exists", "The email you tried to register with is already in use.", email)
+        password = data.get('password')
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+
+        # Check if user already exists
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            logger.info(f"Attempt to create a user with an existing email: {email}")
             return jsonify({"error": "User already exists"}), 400
 
-        hashed_password = bcrypt.generate_password_hash(data['password']).decode('utf-8')
-        new_user = User(email=email, password=hashed_password, first_name=data['first_name'], last_name=data['last_name'])
+        # Hash password
+        hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
+
+        # Create new user
+        new_user = User(
+            email=email,
+            password=hashed_password,
+            first_name=first_name,
+            last_name=last_name,
+            verified=False  # Default verified status
+        )
         db.session.add(new_user)
         db.session.commit()
 
-        send_email("Welcome to WebApp!", "Thank you for registering!", email)
+        # Publish to SNS topic
+        sns_message = {
+            "email": email,
+            "user_id": new_user.id,
+            "first_name": first_name,
+            "last_name": last_name
+        }
+
+        if os.getenv("TEST_ENV") == "true":
+            logger.info("Test environment detected. Skipping SNS publish.")
+        else:
+            sns_client.publish(
+                TopicArn=Config.SNS_TOPIC_ARN,
+                Message=json.dumps(sns_message),
+                Subject="New User Registration Notification"
+            )
+
+        # Log and update metrics
         logger.info(f"User {email} created successfully.")
         put_custom_metric('UserCreation', 1)
 
         return jsonify({
-            "email": new_user.email,
-            "first_name": new_user.first_name,
-            "last_name": new_user.last_name,
-            "account_created": new_user.account_created,
-            "account_updated": new_user.account_updated
+            "message": "User created successfully. Verification email sent.",
+            "user_id": new_user.id
         }), 201
 
-    except OperationalError as e:
-        logger.error(f"Database Error: {str(e)}")
-        return jsonify({"error": "Service Unavailable"}), 503
     except Exception as e:
-        logger.error(f"Error: {str(e)}")
+        logger.error(f"Error during user creation: {str(e)}")
         return jsonify({"error": "An internal server error occurred"}), 500
 
 @user_routes.route('/user/self', methods=['GET'])

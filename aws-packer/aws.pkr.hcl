@@ -19,12 +19,12 @@ variable "source_ami" {
 
 variable "vpc_id" {
   type    = string
-  default = "vpc-0e5d46ba20ffe4e40"
+  default = "vpc-05f8d911629300597"
 }
 
 variable "subnet_id" {
   type    = string
-  default = "subnet-08e9f5466b55ae53c"
+  default = "subnet-0e936dbdf6dbcc408"
 }
 
 variable "instance_type" {

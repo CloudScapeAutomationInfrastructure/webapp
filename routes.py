@@ -107,11 +107,15 @@ def create_user():
             "first_name": first_name,
             "last_name": last_name
         }
-        sns_client.publish(
-            TopicArn=Config.SNS_TOPIC_ARN,  # Replace with your actual SNS Topic ARN
-            Message=json.dumps(sns_message),
-            Subject="New User Registration Notification"
-        )
+
+        if os.getenv("TEST_ENV") == "true":
+            logger.info("Test environment detected. Skipping SNS publish.")
+        else:
+            sns_client.publish(
+                TopicArn=Config.SNS_TOPIC_ARN,
+                Message=json.dumps(sns_message),
+                Subject="New User Registration Notification"
+            )
 
         # Log and update metrics
         logger.info(f"User {email} created successfully.")

@@ -56,3 +56,14 @@ def test_create_user_missing_fields(client):
     assert response.status_code == 400
     response_data = response.get_json()
     assert "Missing required fields" in response_data['error']
+
+
+# Test for health check endpoint
+def test_health_check(client):
+    # Send GET request to the health check endpoint
+    response = client.get('/v1/healthz')
+
+    # Assert the service is healthy
+    assert response.status_code == 200
+    response_data = response.get_json()
+    assert response_data['status'] == "healthy"

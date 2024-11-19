@@ -58,7 +58,6 @@ jobs:
           echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> ${GITHUB_WORKSPACE}/api/.env
           echo "S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME }}" >> ${GITHUB_WORKSPACE}/api/.env
           echo "SNS_TOPIC_ARN=${{ secrets.SNS_TOPIC_ARN }}" >> ${GITHUB_WORKSPACE}/api/.env
-          
 
       - name: Run pytest
         run: |
@@ -77,9 +76,8 @@ jobs:
 
       - name: Build Packer image
         run: |
-            cd aws-packer
-            packer build -var "envfile=${GITHUB_WORKSPACE}/api/.env" aws.pkr.hcl | tee packer_build.log
-        
+          cd aws-packer
+          packer build -var "envfile=${GITHUB_WORKSPACE}/api/.env" aws.pkr.hcl | tee packer_build.log
 
       - name: Configure AWS credentials for demo account
         uses: aws-actions/configure-aws-credentials@v2
@@ -91,49 +89,54 @@ jobs:
       - name: Update Launch Template
         id: update-launch-template
         run: |
-            # Get the AMI ID from the Packer output
-            AMI_ID=$(grep -oP '(?<=AMI:)[a-zA-Z0-9-]+' aws-packer/packer_build.log)
-            echo "AMI_ID=$AMI_ID" >> $GITHUB_ENV
-            
-            # Validate AMI ID format
-            if [[ ! $AMI_ID =~ ^ami-[a-z0-9]{8,17}$ ]]; then
-              echo "Error: Invalid AMI ID format: $AMI_ID"
-              exit 1
-            fi
-            
-            # Get the name of the Launch Template
-            LAUNCH_TEMPLATE_NAME=$(aws ec2 describe-launch-templates --query "LaunchTemplates[0].LaunchTemplateName" --output text)
-            echo "LAUNCH_TEMPLATE_NAME=$LAUNCH_TEMPLATE_NAME" >> $GITHUB_ENV
-            
-            # Create a new Launch Template version
-            aws ec2 create-launch-template-version --launch-template-name "$LAUNCH_TEMPLATE_NAME" --source-version 1 --version-description "New version with AMI $AMI_ID" --launch-template-data "{\"ImageId\":\"$AMI_ID\"}"
-            
-            # Get the latest version number
-            LATEST_VERSION=$(aws ec2 describe-launch-templates --launch-template-name "$LAUNCH_TEMPLATE_NAME" --query "LaunchTemplates[0].LatestVersionNumber" --output text)
-            echo "LATEST_VERSION=$LATEST_VERSION" >> $GITHUB_ENV
-            
-            # Update the Auto Scaling Group to use the latest Launch Template version
-            ASG_NAME=$(aws autoscaling describe-auto-scaling-groups --query "AutoScalingGroups[0].AutoScalingGroupName" --output text)
-            aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG_NAME" --launch-template "{\"LaunchTemplateName\":\"$LAUNCH_TEMPLATE_NAME\",\"Version\":\"$LATEST_VERSION\"}"
-  
+          # Extract AMI ID from Packer log
+          AMI_ID=$(grep -oP '(?<=artifact,0,id,)[^,]+' aws-packer/packer_build.log | cut -d ':' -f 2)
+          echo "Extracted AMI_ID: $AMI_ID"
+
+          # Validate AMI ID
+          if [[ -z "$AMI_ID" ]]; then
+            echo "Error: AMI ID could not be extracted from the Packer build log."
+            exit 1
+          fi
+          if [[ ! $AMI_ID =~ ^ami-[a-z0-9]{8,17}$ ]]; then
+            echo "Error: Invalid AMI ID format: $AMI_ID"
+            exit 1
+          fi
+          echo "AMI_ID=$AMI_ID" >> $GITHUB_ENV
+
+          # Get the name of the Launch Template
+          LAUNCH_TEMPLATE_NAME=$(aws ec2 describe-launch-templates --query "LaunchTemplates[0].LaunchTemplateName" --output text)
+          echo "LAUNCH_TEMPLATE_NAME=$LAUNCH_TEMPLATE_NAME" >> $GITHUB_ENV
+
+          # Create a new Launch Template version
+          aws ec2 create-launch-template-version --launch-template-name "$LAUNCH_TEMPLATE_NAME" --source-version 1 --version-description "New version with AMI $AMI_ID" --launch-template-data "{\"ImageId\":\"$AMI_ID\"}"
+
+          # Get the latest version number
+          LATEST_VERSION=$(aws ec2 describe-launch-templates --launch-template-name "$LAUNCH_TEMPLATE_NAME" --query "LaunchTemplates[0].LatestVersionNumber" --output text)
+          echo "LATEST_VERSION=$LATEST_VERSION" >> $GITHUB_ENV
+
+          # Update the Auto Scaling Group to use the latest Launch Template version
+          ASG_NAME=$(aws autoscaling describe-auto-scaling-groups --query "AutoScalingGroups[0].AutoScalingGroupName" --output text)
+          aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG_NAME" --launch-template "{\"LaunchTemplateName\":\"$LAUNCH_TEMPLATE_NAME\",\"Version\":\"$LATEST_VERSION\"}"
+
       - name: Perform Instance Refresh
         id: instance-refresh
         run: |
-            ASG_NAME=$(aws autoscaling describe-auto-scaling-groups --query "AutoScalingGroups[0].AutoScalingGroupName" --output text)
-            REFRESH_ID=$(aws autoscaling start-instance-refresh --auto-scaling-group-name "$ASG_NAME" --preferences "{\"MinHealthyPercentage\": 100}" --query "InstanceRefreshId" --output text)
-            echo "REFRESH_ID=$REFRESH_ID" >> $GITHUB_ENV
-  
+          ASG_NAME=$(aws autoscaling describe-auto-scaling-groups --query "AutoScalingGroups[0].AutoScalingGroupName" --output text)
+          REFRESH_ID=$(aws autoscaling start-instance-refresh --auto-scaling-group-name "$ASG_NAME" --preferences "{\"MinHealthyPercentage\": 100}" --query "InstanceRefreshId" --output text)
+          echo "REFRESH_ID=$REFRESH_ID" >> $GITHUB_ENV
+
       - name: Wait for Instance Refresh
         run: |
-            ASG_NAME=$(aws autoscaling describe-auto-scaling-groups --query "AutoScalingGroups[0].AutoScalingGroupName" --output text)
-            REFRESH_ID=$(echo $REFRESH_ID)
-            STATUS="InProgress"
-            while [ "$STATUS" == "InProgress" ]; do
-              sleep 30
-              STATUS=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$ASG_NAME" --instance-refresh-ids "$REFRESH_ID" --query "InstanceRefreshes[0].Status" --output text)
-              echo "Instance refresh status: $STATUS"
-            done
-            if [ "$STATUS" != "Successful" ]; then
-              echo "Instance refresh failed!"
-              exit 1
-            fi
+          ASG_NAME=$(aws autoscaling describe-auto-scaling-groups --query "AutoScalingGroups[0].AutoScalingGroupName" --output text)
+          REFRESH_ID=$(echo $REFRESH_ID)
+          STATUS="InProgress"
+          while [ "$STATUS" == "InProgress" ]; do
+            sleep 30
+            STATUS=$(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$ASG_NAME" --instance-refresh-ids "$REFRESH_ID" --query "InstanceRefreshes[0].Status" --output text)
+            echo "Instance refresh status: $STATUS"
+          done
+          if [ "$STATUS" != "Successful" ]; then
+            echo "Instance refresh failed!"
+            exit 1
+          fi

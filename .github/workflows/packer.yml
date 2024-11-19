@@ -79,6 +79,11 @@ jobs:
           cd aws-packer
           packer build -var "envfile=${GITHUB_WORKSPACE}/api/.env" aws.pkr.hcl | tee packer_build.log
 
+      - name: Debug Packer Log
+        run: |
+          echo "Contents of packer_build.log:"
+          cat aws-packer/packer_build.log
+
       - name: Configure AWS credentials for demo account
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -89,8 +94,14 @@ jobs:
       - name: Update Launch Template
         id: update-launch-template
         run: |
+          # Check if the log file exists and is non-empty
+          if [[ ! -s aws-packer/packer_build.log ]]; then
+            echo "Error: Packer build log is missing or empty."
+            exit 1
+          fi
+
           # Extract AMI ID from Packer log
-          AMI_ID=$(grep -oP '(?<=artifact,0,id,)[^,]+' aws-packer/packer_build.log | cut -d ':' -f 2)
+          AMI_ID=$(grep -oP '(?<=artifact,0,id,)[^,]+' aws-packer/packer_build.log | grep -oP 'ami-[a-zA-Z0-9]+')
           echo "Extracted AMI_ID: $AMI_ID"
 
           # Validate AMI ID

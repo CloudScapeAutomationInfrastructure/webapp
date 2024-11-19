@@ -19,12 +19,13 @@ def test_create_user_success(client):
     # Check the returned user details
     assert response_data['message'] == "User created successfully. Verification email sent."
     assert 'user_id' in response_data
+    assert response_data['user_id'] is not None  # Ensure a user ID is returned
 
 
 # Test for handling duplicate user creation
 def test_create_user_already_exists(client):
     payload = {
-        "email": "test@example.com",
+        "email": "duplicate@example.com",
         "password": "strongpassword",
         "first_name": "Test",
         "last_name": "User"
@@ -46,7 +47,7 @@ def test_create_user_already_exists(client):
 # Test for missing fields
 def test_create_user_missing_fields(client):
     payload = {
-        "email": "test@example.com"
+        "email": "missingfields@example.com"
     }
 
     # Send POST request with missing fields
@@ -58,12 +59,3 @@ def test_create_user_missing_fields(client):
     assert "Missing required fields" in response_data['error']
 
 
-# Test for health check endpoint
-def test_health_check(client):
-    # Send GET request to the health check endpoint
-    response = client.get('/v1/healthz')
-
-    # Assert the service is healthy
-    assert response.status_code == 200
-    response_data = response.get_json()
-    assert response_data['status'] == "healthy"

@@ -74,10 +74,25 @@ jobs:
           cd aws-packer
           packer init .
 
-      - name: Build Packer image
+      - name: Build AMI with Packer
         run: |
           cd aws-packer
-          packer build -var "envfile=${GITHUB_WORKSPACE}/api/.env" aws.pkr.hcl | tee packer_build.log
+          packer build -var "additional_account_id=${{ secrets.DEMO_ACCOUNT }}" -var "envfile=${GITHUB_WORKSPACE}/api/.env" aws.pkr.hcl | tee output.log
+          
+          # Extract the AMI ID from the Packer output
+          AMI_ID=$(grep -oP '(?<=AMI: )[a-zA-Z0-9-]+' output.log)
+          echo "Extracted AMI_ID: $AMI_ID"
+          
+          # Validate the AMI ID format
+          if [[ -z "$AMI_ID" ]]; then
+            echo "Error: Failed to extract AMI ID from Packer output."
+            exit 1
+          fi
+          if [[ ! $AMI_ID =~ ^ami-[a-zA-Z0-9]{8,17}$ ]]; then
+            echo "Error: Invalid AMI ID format: $AMI_ID"
+            exit 1
+          fi
+          echo "AMI_ID=${AMI_ID}" >> $GITHUB_ENV
 
       - name: Debug Packer Log
         run: |
@@ -94,39 +109,26 @@ jobs:
       - name: Update Launch Template
         id: update-launch-template
         run: |
-          # Check if the log file exists and is non-empty
-          if [[ ! -s aws-packer/packer_build.log ]]; then
+          if [[ ! -s aws-packer/output.log ]]; then
             echo "Error: Packer build log is missing or empty."
             exit 1
           fi
-
-          # Extract AMI ID from Packer log
-          AMI_ID=$(grep -oP '(?<=artifact,0,id,)[^,]+' aws-packer/packer_build.log | grep -oP 'ami-[a-zA-Z0-9]+')
+          AMI_ID=$(grep -oP '(?<=artifact,0,id,)[^,]+' aws-packer/output.log | grep -oP 'ami-[a-zA-Z0-9]+')
           echo "Extracted AMI_ID: $AMI_ID"
-
-          # Validate AMI ID
           if [[ -z "$AMI_ID" ]]; then
-            echo "Error: AMI ID could not be extracted from the Packer build log."
+            echo "Error: AMI ID could not be extracted."
             exit 1
           fi
-          if [[ ! $AMI_ID =~ ^ami-[a-z0-9]{8,17}$ ]]; then
-            echo "Error: Invalid AMI ID format: $AMI_ID"
-            exit 1
-          fi
-          echo "AMI_ID=$AMI_ID" >> $GITHUB_ENV
+          echo "AMI_ID=${AMI_ID}" >> $GITHUB_ENV
 
-          # Get the name of the Launch Template
           LAUNCH_TEMPLATE_NAME=$(aws ec2 describe-launch-templates --query "LaunchTemplates[0].LaunchTemplateName" --output text)
           echo "LAUNCH_TEMPLATE_NAME=$LAUNCH_TEMPLATE_NAME" >> $GITHUB_ENV
 
-          # Create a new Launch Template version
           aws ec2 create-launch-template-version --launch-template-name "$LAUNCH_TEMPLATE_NAME" --source-version 1 --version-description "New version with AMI $AMI_ID" --launch-template-data "{\"ImageId\":\"$AMI_ID\"}"
 
-          # Get the latest version number
           LATEST_VERSION=$(aws ec2 describe-launch-templates --launch-template-name "$LAUNCH_TEMPLATE_NAME" --query "LaunchTemplates[0].LatestVersionNumber" --output text)
           echo "LATEST_VERSION=$LATEST_VERSION" >> $GITHUB_ENV
 
-          # Update the Auto Scaling Group to use the latest Launch Template version
           ASG_NAME=$(aws autoscaling describe-auto-scaling-groups --query "AutoScalingGroups[0].AutoScalingGroupName" --output text)
           aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG_NAME" --launch-template "{\"LaunchTemplateName\":\"$LAUNCH_TEMPLATE_NAME\",\"Version\":\"$LATEST_VERSION\"}"
 

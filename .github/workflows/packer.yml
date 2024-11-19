@@ -84,17 +84,11 @@ jobs:
           
           # Extract the AMI ID from the Packer output
           AMI_ID=$(grep -oP '(?<=AMI: )[a-zA-Z0-9-]+' output.log)
-          echo "Extracted AMI_ID: $AMI_ID"
-          
-          # Validate the AMI ID format
           if [[ -z "$AMI_ID" ]]; then
-            echo "Error: Failed to extract AMI ID from Packer output."
+            echo "Error: AMI ID could not be extracted from the Packer output."
             exit 1
           fi
-          if [[ ! $AMI_ID =~ ^ami-[a-zA-Z0-9]{8,17}$ ]]; then
-            echo "Error: Invalid AMI ID format: $AMI_ID"
-            exit 1
-          fi
+          echo "Extracted AMI_ID: $AMI_ID"
           echo "AMI_ID=${AMI_ID}" >> $GITHUB_ENV
 
       - name: Debug Packer Log
@@ -110,12 +104,8 @@ jobs:
             exit 1
           fi
 
-          # Debug: Print the contents of output.log
-          echo "Debug: Contents of output.log:"
-          cat aws-packer/output.log
-
           # Extract AMI ID
-          AMI_ID=$(grep -oP '(?<=artifact,0,id,)[^,]+' aws-packer/output.log | grep -oP 'ami-[a-zA-Z0-9]+')
+          AMI_ID=$(grep -oP '(?<=AMI: )[a-zA-Z0-9-]+' aws-packer/output.log)
           if [[ -z "$AMI_ID" ]]; then
             echo "Error: AMI ID could not be extracted from the output log."
             exit 1
@@ -123,26 +113,21 @@ jobs:
           echo "Extracted AMI_ID: $AMI_ID"
           echo "AMI_ID=${AMI_ID}" >> $GITHUB_ENV
 
-          # Fetch launch template name
+          # Fetch Launch Template Name
           LAUNCH_TEMPLATE_NAME=$(aws ec2 describe-launch-templates --query "LaunchTemplates[0].LaunchTemplateName" --output text 2>&1)
           if [[ $? -ne 0 || -z "$LAUNCH_TEMPLATE_NAME" ]]; then
             echo "Error: Could not fetch launch template name. Check if a launch template exists."
             echo "Debug: AWS CLI output: $LAUNCH_TEMPLATE_NAME"
             exit 1
           fi
-          echo "LAUNCH_TEMPLATE_NAME=$LAUNCH_TEMPLATE_NAME" >> $GITHUB_ENV
+          echo "Launch Template Name: $LAUNCH_TEMPLATE_NAME"
 
-          # Create new launch template version
-          CREATE_TEMPLATE_OUTPUT=$(aws ec2 create-launch-template-version \
+          # Create new Launch Template Version
+          aws ec2 create-launch-template-version \
             --launch-template-name "$LAUNCH_TEMPLATE_NAME" \
             --source-version 1 \
             --version-description "New version with AMI $AMI_ID" \
-            --launch-template-data "{\"ImageId\":\"$AMI_ID\"}" 2>&1)
-          if [[ $? -ne 0 ]]; then
-            echo "Error: Failed to create a new launch template version."
-            echo "Debug: AWS CLI output: $CREATE_TEMPLATE_OUTPUT"
-            exit 1
-          fi
+            --launch-template-data "{\"ImageId\":\"$AMI_ID\"}" || exit 1
 
           # Fetch latest version
           LATEST_VERSION=$(aws ec2 describe-launch-templates \
@@ -153,27 +138,22 @@ jobs:
             echo "Debug: AWS CLI output: $LATEST_VERSION"
             exit 1
           fi
-          echo "LATEST_VERSION=$LATEST_VERSION" >> $GITHUB_ENV
+          echo "Latest Version: $LATEST_VERSION"
 
-          # Fetch auto-scaling group name
+          # Fetch Auto Scaling Group Name
           ASG_NAME=$(aws autoscaling describe-auto-scaling-groups \
             --query "AutoScalingGroups[0].AutoScalingGroupName" --output text 2>&1)
           if [[ $? -ne 0 || -z "$ASG_NAME" ]]; then
-            echo "Error: Could not fetch auto-scaling group name. Check if an auto-scaling group exists."
+            echo "Error: Could not fetch auto-scaling group name."
             echo "Debug: AWS CLI output: $ASG_NAME"
             exit 1
           fi
-          echo "ASG_NAME=$ASG_NAME"
+          echo "Auto Scaling Group Name: $ASG_NAME"
 
-          # Update auto-scaling group
-          UPDATE_ASG_OUTPUT=$(aws autoscaling update-auto-scaling-group \
+          # Update Auto Scaling Group
+          aws autoscaling update-auto-scaling-group \
             --auto-scaling-group-name "$ASG_NAME" \
-            --launch-template "{\"LaunchTemplateName\":\"$LAUNCH_TEMPLATE_NAME\",\"Version\":\"$LATEST_VERSION\"}" 2>&1)
-          if [[ $? -ne 0 ]]; then
-            echo "Error: Failed to update the auto-scaling group."
-            echo "Debug: AWS CLI output: $UPDATE_ASG_OUTPUT"
-            exit 1
-          fi
+            --launch-template "{\"LaunchTemplateName\":\"$LAUNCH_TEMPLATE_NAME\",\"Version\":\"$LATEST_VERSION\"}" || exit 1
 
       - name: Perform Instance Refresh
         id: instance-refresh

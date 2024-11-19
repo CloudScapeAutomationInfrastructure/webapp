@@ -77,7 +77,10 @@ jobs:
       - name: Build AMI with Packer
         run: |
           cd aws-packer
-          packer build -var "additional_account_id=${{ secrets.DEMO_ACCOUNT }}" -var "envfile=${GITHUB_WORKSPACE}/api/.env" aws.pkr.hcl | tee output.log
+          packer build \
+            -var "additional_account_id=${{ secrets.DEMO_ACCOUNT }}" \
+            -var "envfile=${GITHUB_WORKSPACE}/api/.env" \
+            aws.pkr.hcl | tee output.log
           
           # Extract the AMI ID from the Packer output
           AMI_ID=$(grep -oP '(?<=AMI: )[a-zA-Z0-9-]+' output.log)
@@ -96,8 +99,8 @@ jobs:
 
       - name: Debug Packer Log
         run: |
-          echo "Contents of packer_build.log:"
-          cat aws-packer/packer_build.log
+          echo "Contents of output.log:"
+          cat aws-packer/output.log
 
       - name: Configure AWS credentials for demo account
         uses: aws-actions/configure-aws-credentials@v2

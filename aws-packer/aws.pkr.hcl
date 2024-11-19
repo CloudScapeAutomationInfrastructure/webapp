@@ -52,7 +52,7 @@ source "amazon-ebs" "ubuntu-webapp" {
   source_ami                  = var.source_ami
   instance_type               = var.instance_type
   ssh_username                = var.ssh_username
-  ami_users                   = [var.additional_account_id]
+  ami_users                   = var.additional_account_id != null ? [var.additional_account_id] : []
   ami_name                    = "webappServer-{{timestamp}}"
   ami_description             = "webappServer_vm-ubuntu-24-04-lts-${formatdate("YYYY_MM_DD_HH_MM", timestamp())}"
   vpc_id                      = var.vpc_id
@@ -62,6 +62,7 @@ source "amazon-ebs" "ubuntu-webapp" {
     Name = "WebServer App AMI"
   }
 }
+
 
 build {
   sources = ["source.amazon-ebs.ubuntu-webapp"]

@@ -87,7 +87,11 @@ def create_user():
             return jsonify({"error": "User already exists"}), 400
 
         # Hash password
-        hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
+        try:
+            hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
+        except Exception as e:
+            logger.error(f"Failed to hash password for user {email}: {str(e)}")
+            return jsonify({"error": "Failed to process password"}), 500
 
         # Create new user
         new_user = User(
@@ -97,8 +101,14 @@ def create_user():
             last_name=last_name,
             verified=False  # Default verified status
         )
-        db.session.add(new_user)
-        db.session.commit()
+        try:
+            db.session.add(new_user)
+            db.session.commit()
+            logger.info(f"User {email} successfully created in the database.")
+        except Exception as db_error:
+            logger.error(f"Database commit failed for user {email}: {str(db_error)}")
+            db.session.rollback()
+            return jsonify({"error": "Database error occurred"}), 500
 
         # Publish to SNS topic
         sns_message = {
@@ -107,59 +117,30 @@ def create_user():
             "first_name": first_name,
             "last_name": last_name
         }
-
         if os.getenv("TEST_ENV") == "true":
             logger.info("Test environment detected. Skipping SNS publish.")
         else:
-            sns_client.publish(
-                TopicArn=Config.SNS_TOPIC_ARN,
-                Message=json.dumps(sns_message),
-                Subject="New User Registration Notification"
-            )
+            try:
+                sns_client.publish(
+                    TopicArn=Config.SNS_TOPIC_ARN,
+                    Message=json.dumps(sns_message),
+                    Subject="New User Registration Notification"
+                )
+                logger.info(f"SNS notification sent for user {email}.")
+            except Exception as sns_error:
+                logger.error(f"SNS publish failed for user {email}: {str(sns_error)}")
+                return jsonify({"error": "Failed to send notification. User creation aborted."}), 500
 
         # Log and update metrics
-        logger.info(f"User {email} created successfully.")
         put_custom_metric('UserCreation', 1)
-
         return jsonify({
             "message": "User created successfully. Verification email sent.",
             "user_id": new_user.id
         }), 201
 
     except Exception as e:
-        logger.error(f"Error during user creation: {str(e)}")
+        logger.error(f"Unexpected error during user creation: {str(e)}")
         return jsonify({"error": "An internal server error occurred"}), 500
-
-@user_routes.route('/user/self', methods=['GET'])
-@auth.login_required
-def get_user():
-    """
-    Get user profile information.
-    Block access for unverified users.
-    """
-    try:
-        user = auth.current_user()
-        
-        # Check if user is verified
-        if not is_user_verified(user):
-            return jsonify({"error": "Access denied. Verify your email to access this resource."}), 403
-
-        user_data = {
-            "email": user.email,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "account_created": user.account_created,
-            "account_updated": user.account_updated
-        }
-        
-        logger.info(f"User {user.email} retrieved their profile data.")
-        put_custom_metric('UserProfileFetch', 1)
-        
-        return jsonify(user_data), 200
-
-    except Exception as e:
-        logger.error(f"Failed to retrieve user profile: {str(e)}")
-        return jsonify({"error": "Failed to retrieve user profile"}), 500
 
 
 @user_routes.route('/user/self/pic', methods=['POST'])

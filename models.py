@@ -11,6 +11,7 @@ class User(db.Model):
     password = db.Column(db.String(120), nullable=False)
     first_name = db.Column(db.String(50), nullable=False)
     last_name = db.Column(db.String(50), nullable=False)
+    verified = db.Column(db.Boolean, default=False)
     account_created = db.Column(db.DateTime, default=datetime.utcnow)
     account_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

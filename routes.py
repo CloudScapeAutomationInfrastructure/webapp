@@ -70,27 +70,24 @@ def send_email(subject, content, to_email):
         logger.error(f"Failed to send email: {str(e)}")
 
 def publish_sns_notification(message, subject):
-    try:
-        sns_client.publish(
-            TopicArn=Config.SNS_TOPIC_ARN,
-            Message=json.dumps(message),
-            Subject=subject
-        )
-        logger.info(f"SNS notification sent with subject: {subject}")
-    except Exception as sns_error:
-        logger.error(f"Failed to send SNS notification: {sns_error}")
-        raise
+    if os.getenv("TEST_ENV") == "true":
+        logger.info("Test environment detected. Skipping SNS publish.")
+    else:
+        try:
+            sns_client.publish(
+                TopicArn=Config.SNS_TOPIC_ARN,
+                Message=json.dumps(message),
+                Subject=subject
+            )
+            logger.info(f"SNS notification sent with subject: {subject}")
+        except Exception as sns_error:
+            logger.error(f"Failed to send SNS notification: {sns_error}")
+            raise
 
 def generate_verification_link(user_id):
-    """
-    Generate a verification link for the user.
-    If DOMAIN_NAME is not set, dynamically infer the host or fallback to localhost.
-    """
     expiration_time = datetime.utcnow() + timedelta(minutes=2)
     token_data = f"{user_id}-{expiration_time.timestamp()}"
     token = hashlib.sha256(token_data.encode()).hexdigest()
-
-    # Use dynamic host URL or fallback
     domain = request.host_url.strip("/") if request else "http://localhost:5000"
     return f"{domain}/v1/verify?token={token}"
 
@@ -151,13 +148,33 @@ def create_user():
             "first_name": first_name,
             "last_name": last_name,
         }
-        publish_sns_notification(sns_message, "New User Created")
 
-        return jsonify({"message": "User created successfully. Verification email sent."}), 201
+        # Conditional SNS Publish
+        if os.getenv("TEST_ENV") == "true":
+            logger.info("Test environment detected. Skipping SNS publish.")
+        else:
+            try:
+                sns_client.publish(
+                    TopicArn=Config.SNS_TOPIC_ARN,
+                    Message=json.dumps(sns_message),
+                    Subject="New User Registration Notification"
+                )
+                logger.info(f"SNS notification sent for user {email}.")
+            except Exception as sns_error:
+                logger.error(f"SNS publish failed for user {email}: {sns_error}")
+                return jsonify({"error": "Failed to send notification. User creation aborted."}), 500
+
+        # Log and update metrics
+        put_custom_metric('UserCreation', 1)
+
+        return jsonify({
+            "message": "User created successfully. Verification email sent.",
+            "user_id": new_user.id
+        }), 201
 
     except Exception as e:
         logger.error(f"Unexpected error during user creation: {e}")
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": "An internal server error occurred"}), 500
 
 # Verify User Endpoint
 @user_routes.route('/verify', methods=['GET'])

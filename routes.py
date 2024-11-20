@@ -11,7 +11,8 @@ import os
 import logging
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, To, Content
-from datetime import datetime
+from datetime import datetime, timedelta
+import hashlib
 
 # Initialize clients and configurations
 statsd_client = statsd.StatsClient('localhost', 8125)
@@ -33,7 +34,11 @@ auth = HTTPBasicAuth()
 def verify_password(email, password):
     user = User.query.filter_by(email=email).first()
     if user and bcrypt.check_password_hash(user.password, password):
-        return user
+        if user.verified:
+            return user
+        else:
+            logger.info(f"Unverified user {email} attempted to log in.")
+            return None
     return None
 
 # Helper methods
@@ -64,11 +69,44 @@ def send_email(subject, content, to_email):
     except Exception as e:
         logger.error(f"Failed to send email: {str(e)}")
 
+def publish_sns_notification(message, subject):
+    if os.getenv("TEST_ENV") == "true":
+        logger.info("Test environment detected. Skipping SNS publish.")
+    else:
+        try:
+            sns_client.publish(
+                TopicArn=Config.SNS_TOPIC_ARN,
+                Message=json.dumps(message),
+                Subject=subject
+            )
+            logger.info(f"SNS notification sent with subject: {subject}")
+        except Exception as sns_error:
+            logger.error(f"Failed to send SNS notification: {sns_error}")
+            raise
+
+def generate_verification_link(user_id):
+    expiration_time = datetime.utcnow() + timedelta(minutes=2)
+    token_data = f"{user_id}-{expiration_time.timestamp()}"
+    token = hashlib.sha256(token_data.encode()).hexdigest()
+    domain = request.host_url.strip("/") if request else "http://localhost:5000"
+    return f"{domain}/v1/verify?token={token}"
+
+def validate_verification_token(token):
+    try:
+        decoded_data = token.split("-")
+        user_id = int(decoded_data[0])
+        expiration_timestamp = float(decoded_data[1])
+        if datetime.utcnow().timestamp() > expiration_timestamp:
+            return None
+        return user_id
+    except Exception as e:
+        logger.error(f"Error validating token: {e}")
+        return None
+
 # Create User Endpoint
 @user_routes.route('/user', methods=['POST'])
 def create_user():
     try:
-        # Parse incoming data
         data = request.json
         required_fields = ['email', 'password', 'first_name', 'last_name']
         missing_fields = [field for field in required_fields if not data.get(field)]
@@ -80,43 +118,38 @@ def create_user():
         first_name = data.get('first_name')
         last_name = data.get('last_name')
 
-        # Check if user already exists
         existing_user = User.query.filter_by(email=email).first()
         if existing_user:
-            logger.info(f"Attempt to create a user with an existing email: {email}")
             return jsonify({"error": "User already exists"}), 400
 
-        # Hash password
-        try:
-            hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
-        except Exception as e:
-            logger.error(f"Failed to hash password for user {email}: {str(e)}")
-            return jsonify({"error": "Failed to process password"}), 500
+        hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
+        new_user = User(email=email, password=hashed_password, first_name=first_name, last_name=last_name, verified=False)
+        db.session.add(new_user)
+        db.session.commit()
 
-        # Create new user
-        new_user = User(
-            email=email,
-            password=hashed_password,
-            first_name=first_name,
-            last_name=last_name,
-            verified=False  # Default verified status
-        )
-        try:
-            db.session.add(new_user)
-            db.session.commit()
-            logger.info(f"User {email} successfully created in the database.")
-        except Exception as db_error:
-            logger.error(f"Database commit failed for user {email}: {str(db_error)}")
-            db.session.rollback()
-            return jsonify({"error": "Database error occurred"}), 500
+        # Generate verification link
+        verification_link = generate_verification_link(new_user.id)
 
-        # Publish to SNS topic
+        email_subject = "Verify Your Email Address"
+        email_body = f"""
+        Hello {first_name},
+
+        Please verify your email by clicking the link below. This link will expire in 2 minutes:
+        {verification_link}
+
+        Thank you!
+        """
+        send_email(email_subject, email_body, email)
+
         sns_message = {
+            "action": "user_creation",
             "email": email,
             "user_id": new_user.id,
             "first_name": first_name,
-            "last_name": last_name
+            "last_name": last_name,
         }
+
+        # Conditional SNS Publish
         if os.getenv("TEST_ENV") == "true":
             logger.info("Test environment detected. Skipping SNS publish.")
         else:
@@ -128,20 +161,79 @@ def create_user():
                 )
                 logger.info(f"SNS notification sent for user {email}.")
             except Exception as sns_error:
-                logger.error(f"SNS publish failed for user {email}: {str(sns_error)}")
+                logger.error(f"SNS publish failed for user {email}: {sns_error}")
                 return jsonify({"error": "Failed to send notification. User creation aborted."}), 500
 
         # Log and update metrics
         put_custom_metric('UserCreation', 1)
+
         return jsonify({
             "message": "User created successfully. Verification email sent.",
             "user_id": new_user.id
         }), 201
 
     except Exception as e:
-        logger.error(f"Unexpected error during user creation: {str(e)}")
+        logger.error(f"Unexpected error during user creation: {e}")
         return jsonify({"error": "An internal server error occurred"}), 500
 
+# Verify User Endpoint
+@user_routes.route('/verify', methods=['GET'])
+def verify_user():
+    try:
+        token = request.args.get('token')
+        if not token:
+            return jsonify({"error": "Token is required"}), 400
+
+        user_id = validate_verification_token(token)
+        if not user_id:
+            return jsonify({"error": "Invalid or expired token"}), 400
+
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        if user.verified:
+            return jsonify({"message": "User is already verified"}), 200
+
+        user.verified = True
+        db.session.commit()
+
+        sns_message = {
+            "action": "user_verified",
+            "email": user.email,
+            "user_id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+        }
+        publish_sns_notification(sns_message, "User Verified")
+
+        return jsonify({"message": "User verified successfully"}), 200
+
+    except Exception as e:
+        logger.error(f"Error verifying user: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+# Get User Details Endpoint
+@user_routes.route('/user/self', methods=['GET'])
+@auth.login_required
+def get_user():
+    try:
+        user = auth.current_user()
+
+        user_data = {
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "account_created": user.account_created.isoformat(),
+            "account_updated": user.account_updated.isoformat(),
+        }
+
+        put_custom_metric('UserProfileFetch', 1)
+        return jsonify(user_data), 200
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve user profile: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 
 @user_routes.route('/user/self/pic', methods=['POST'])
 @auth.login_required

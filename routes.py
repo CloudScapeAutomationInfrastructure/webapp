@@ -120,21 +120,33 @@ def create_user():
         db.session.add(new_user)
         db.session.commit()
 
-        # Generate verification link and send email
+        # Generate verification link
         verification_link = generate_verification_link(new_user.id)
         email_subject = "Verify Your Email Address"
         email_body = f"Hello {first_name},\n\nPlease verify your email by clicking the link below:\n{verification_link}"
-        send_email(email_subject, email_body, email)
 
-        # Publish SNS notification
+        # Attempt to send email and log errors if it fails
+        try:
+            send_email(email_subject, email_body, email)
+        except Exception as e:
+            logger.error(f"Failed to send email to {email}: {e}")
+
+        # Attempt to publish SNS notification and log errors if it fails
         sns_message = {"action": "user_creation", "email": email, "user_id": new_user.id}
-        publish_sns_notification(sns_message, "New User Registered")
+        try:
+            publish_sns_notification(sns_message, "New User Registered")
+        except Exception as e:
+            logger.error(f"Failed to publish SNS notification for user {email}: {e}")
 
-        return jsonify({"message": "User created successfully. Verification email sent."}), 201
+        return jsonify({
+            "message": "User created successfully. Verification email sent.",
+            "user_id": new_user.id
+        }), 201
+
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         return jsonify({"error": "Internal server error"}), 500
-
+    
 @user_routes.route('/verify', methods=['GET'])
 def verify_user():
     """Verify a user's email address."""

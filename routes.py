@@ -14,24 +14,24 @@ from sendgrid.helpers.mail import Mail, Email, To, Content
 from datetime import datetime, timedelta
 import hashlib
 
-# Initialize clients and configurations
+
 statsd_client = statsd.StatsClient('localhost', 8125)
 sg = SendGridAPIClient(api_key=Config.SENDGRID_API_KEY)
 s3_client = boto3.client('s3', region_name=Config.AWS_REGION)
 sns_client = boto3.client('sns', region_name=Config.AWS_REGION)
 cloudwatch_client = boto3.client('cloudwatch', region_name=Config.AWS_REGION)
 
-# Load S3 bucket and KMS key from environment variables
+
 BUCKET_NAME = os.getenv('S3_BUCKET_NAME', 'your-default-bucket')
 KMS_KEY_ID = os.getenv('KMS_KEY_ID', 'your-default-kms-key-id')
 
-# Initialize logging
+
 logger = logging.getLogger("flask-app")
 
-# Blueprint for user routes
+
 user_routes = Blueprint('user_routes', __name__, url_prefix='/v1')
 
-# Bcrypt and HTTPAuth for authentication
+
 bcrypt = Bcrypt()
 auth = HTTPBasicAuth()
 
@@ -46,7 +46,7 @@ def verify_password(email, password):
             return None
     return None
 
-# Helper Functions
+
 def send_email(subject, content, to_email):
     """Send email using SendGrid."""
     from_email = Email(Config.FROM_EMAIL)
@@ -97,7 +97,7 @@ def validate_verification_token(token):
         logger.error(f"Error validating token: {e}")
         return None
 
-# User Management Endpoints
+
 @user_routes.route('/user', methods=['POST'])
 def create_user():
     """Create a new user."""
@@ -120,18 +120,18 @@ def create_user():
         db.session.add(new_user)
         db.session.commit()
 
-        # Generate verification link
+       
         verification_link = generate_verification_link(new_user.id)
         email_subject = "Verify Your Email Address"
         email_body = f"Hello {first_name},\n\nPlease verify your email by clicking the link below:\n{verification_link}"
 
-        # Attempt to send email and log errors if it fails
+        
         try:
             send_email(email_subject, email_body, email)
         except Exception as e:
             logger.error(f"Failed to send email to {email}: {e}")
 
-        # Attempt to publish SNS notification and log errors if it fails
+        
         sns_message = {"action": "user_creation", "email": email, "user_id": new_user.id}
         try:
             publish_sns_notification(sns_message, "New User Registered")
@@ -177,7 +177,7 @@ def verify_user():
         logger.error(f"Error verifying user: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
-# S3 Image Management Endpoints
+
 @user_routes.route('/user/self/pic', methods=['POST'])
 @auth.login_required
 def upload_image():
@@ -192,11 +192,11 @@ def upload_image():
         if not image_file:
             return jsonify({"error": "No file provided"}), 400
 
-        # File size validation
-        image_file.seek(0, 2)  # Move cursor to the end of file
+        
+        image_file.seek(0, 2)  
         file_size = image_file.tell()
-        image_file.seek(0)  # Reset cursor to the beginning of file
-        if file_size > 5 * 1024 * 1024:  # Limit file size to 5MB
+        image_file.seek(0)  
+        if file_size > 5 * 1024 * 1024:  
             return jsonify({"error": "File size exceeds 5MB limit"}), 400
 
         file_key = f"{user.id}/{image_file.filename}"
@@ -235,12 +235,12 @@ def delete_image():
         logger.error(f"Error deleting image: {e}")
         return jsonify({"error": "Failed to delete image"}), 500
 
-# Health Check Endpoint
+
 @user_routes.route('/healthz', methods=['GET'])
 def health_check():
     """Health check endpoint."""
     try:
-        # Check database connection
+       
         db.engine.execute("SELECT 1")
         return jsonify({"status": "healthy"}), 200
     except OperationalError as e:

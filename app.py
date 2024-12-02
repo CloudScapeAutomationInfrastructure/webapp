@@ -9,26 +9,26 @@ import boto3
 from sendgrid import SendGridAPIClient
 import os
 
-# Initialize Flask app
+
 app = Flask(__name__)
 
-# Set up configuration
+
 app.config.from_object(Config)
 
-# Initialize Bcrypt for password hashing
+
 bcrypt = Bcrypt(app)
 
-# Initialize database
+
 db.init_app(app)
 
-# Register routes
+
 app.register_blueprint(user_routes)
 
-# Configure AWS Boto3 session
+
 aws_region = app.config["AWS_REGION"]
 boto3.setup_default_session(region_name=aws_region)
 
-# Set up logging with CloudWatch
+
 logger = logging.getLogger("flask-app")
 logger.setLevel(logging.INFO)
 
@@ -44,10 +44,10 @@ try:
 except Exception as e:
     logger.error(f"Failed to configure CloudWatch logging: {e}")
 
-# Log Flask application start
+
 logger.info("Flask application has started.")
 
-# Initialize SendGrid client
+
 sendgrid_api_key = os.getenv("SENDGRID_API_KEY")
 sendgrid_client = None
 if not sendgrid_api_key:
@@ -59,7 +59,7 @@ else:
     except Exception as e:
         logger.error(f"Failed to initialize SendGrid client: {e}")
 
-# Database table creation
+
 with app.app_context():
     try:
         db.create_all()
@@ -67,7 +67,7 @@ with app.app_context():
     except Exception as e:
         logger.error(f"Error creating database tables: {e}")
 
-# Run the application
+
 if __name__ == '__main__':
     debug_mode = app.config.get("DEBUG", False)
     try:

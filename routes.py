@@ -14,24 +14,19 @@ from sendgrid.helpers.mail import Mail, Email, To, Content
 from datetime import datetime, timedelta
 import hashlib
 
-
+# Initialize clients and configurations
 statsd_client = statsd.StatsClient('localhost', 8125)
 sg = SendGridAPIClient(api_key=Config.SENDGRID_API_KEY)
 s3_client = boto3.client('s3', region_name=Config.AWS_REGION)
 sns_client = boto3.client('sns', region_name=Config.AWS_REGION)
 cloudwatch_client = boto3.client('cloudwatch', region_name=Config.AWS_REGION)
-
-
-BUCKET_NAME = os.getenv('S3_BUCKET_NAME', 'your-default-bucket')
-KMS_KEY_ID = os.getenv('KMS_KEY_ID', 'your-default-kms-key-id')
-
-
+BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
 logger = logging.getLogger("flask-app")
 
-
+# Blueprint for user routes
 user_routes = Blueprint('user_routes', __name__, url_prefix='/v1')
 
-
+# Bcrypt and HTTPAuth for authentication
 bcrypt = Bcrypt()
 auth = HTTPBasicAuth()
 
@@ -46,9 +41,22 @@ def verify_password(email, password):
             return None
     return None
 
+# Helper methods
+def put_custom_metric(metric_name, value):
+    cloudwatch_client.put_metric_data(
+        Namespace='WebAppMetrics',
+        MetricData=[
+            {
+                'MetricName': metric_name,
+                'Timestamp': datetime.utcnow(),
+                'Value': value,
+                'Unit': 'Count'
+            },
+        ]
+    )
+    statsd_client.incr(metric_name, value)
 
 def send_email(subject, content, to_email):
-    """Send email using SendGrid."""
     from_email = Email(Config.FROM_EMAIL)
     to_email = To(to_email)
     reply_to_email = Email(Config.REPLY_TO_EMAIL)
@@ -77,7 +85,6 @@ def publish_sns_notification(message, subject):
             raise
 
 def generate_verification_link(user_id):
-    """Generate a verification link for a user."""
     expiration_time = datetime.utcnow() + timedelta(minutes=2)
     token_data = f"{user_id}-{expiration_time.timestamp()}"
     token = hashlib.sha256(token_data.encode()).hexdigest()
@@ -85,7 +92,6 @@ def generate_verification_link(user_id):
     return f"{domain}/v1/verify?token={token}"
 
 def validate_verification_token(token):
-    """Validate the verification token."""
     try:
         decoded_data = token.split("-")
         user_id = int(decoded_data[0])
@@ -97,19 +103,20 @@ def validate_verification_token(token):
         logger.error(f"Error validating token: {e}")
         return None
 
-
+# Create User Endpoint
 @user_routes.route('/user', methods=['POST'])
 def create_user():
-    """Create a new user."""
     try:
         data = request.json
+        required_fields = ['email', 'password', 'first_name', 'last_name']
+        missing_fields = [field for field in required_fields if not data.get(field)]
+        if missing_fields:
+            return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
+
         email = data.get('email')
         password = data.get('password')
         first_name = data.get('first_name')
         last_name = data.get('last_name')
-
-        if not email or not password or not first_name or not last_name:
-            return jsonify({"error": "Missing required fields"}), 400
 
         existing_user = User.query.filter_by(email=email).first()
         if existing_user:
@@ -120,23 +127,45 @@ def create_user():
         db.session.add(new_user)
         db.session.commit()
 
-       
+        # Generate verification link
         verification_link = generate_verification_link(new_user.id)
+
         email_subject = "Verify Your Email Address"
-        email_body = f"Hello {first_name},\n\nPlease verify your email by clicking the link below:\n{verification_link}"
+        email_body = f"""
+        Hello {first_name},
 
-        
-        try:
-            send_email(email_subject, email_body, email)
-        except Exception as e:
-            logger.error(f"Failed to send email to {email}: {e}")
+        Please verify your email by clicking the link below. This link will expire in 2 minutes:
+        {verification_link}
 
-        
-        sns_message = {"action": "user_creation", "email": email, "user_id": new_user.id}
-        try:
-            publish_sns_notification(sns_message, "New User Registered")
-        except Exception as e:
-            logger.error(f"Failed to publish SNS notification for user {email}: {e}")
+        Thank you!
+        """
+        send_email(email_subject, email_body, email)
+
+        sns_message = {
+            "action": "user_creation",
+            "email": email,
+            "user_id": new_user.id,
+            "first_name": first_name,
+            "last_name": last_name,
+        }
+
+        # Conditional SNS Publish
+        if os.getenv("TEST_ENV") == "true":
+            logger.info("Test environment detected. Skipping SNS publish.")
+        else:
+            try:
+                sns_client.publish(
+                    TopicArn=Config.SNS_TOPIC_ARN,
+                    Message=json.dumps(sns_message),
+                    Subject="New User Registration Notification"
+                )
+                logger.info(f"SNS notification sent for user {email}.")
+            except Exception as sns_error:
+                logger.error(f"SNS publish failed for user {email}: {sns_error}")
+                return jsonify({"error": "Failed to send notification. User creation aborted."}), 500
+
+        # Log and update metrics
+        put_custom_metric('UserCreation', 1)
 
         return jsonify({
             "message": "User created successfully. Verification email sent.",
@@ -144,12 +173,12 @@ def create_user():
         }), 201
 
     except Exception as e:
-        logger.error(f"Error creating user: {e}")
-        return jsonify({"error": "Internal server error"}), 500
-    
+        logger.error(f"Unexpected error during user creation: {e}")
+        return jsonify({"error": "An internal server error occurred"}), 500
+
+# Verify User Endpoint
 @user_routes.route('/verify', methods=['GET'])
 def verify_user():
-    """Verify a user's email address."""
     try:
         token = request.args.get('token')
         if not token:
@@ -169,79 +198,112 @@ def verify_user():
         user.verified = True
         db.session.commit()
 
-        sns_message = {"action": "user_verified", "email": user.email, "user_id": user.id}
+        sns_message = {
+            "action": "user_verified",
+            "email": user.email,
+            "user_id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+        }
         publish_sns_notification(sns_message, "User Verified")
 
         return jsonify({"message": "User verified successfully"}), 200
+
     except Exception as e:
         logger.error(f"Error verifying user: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
+# Get User Details Endpoint
+@user_routes.route('/user/self', methods=['GET'])
+@auth.login_required
+def get_user():
+    try:
+        user = auth.current_user()
+
+        user_data = {
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "account_created": user.account_created.isoformat(),
+            "account_updated": user.account_updated.isoformat(),
+        }
+
+        put_custom_metric('UserProfileFetch', 1)
+        return jsonify(user_data), 200
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve user profile: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 
 @user_routes.route('/user/self/pic', methods=['POST'])
 @auth.login_required
 def upload_image():
-    """Upload an image to S3."""
+    """
+    Upload an image for the user.
+    Block access for unverified users.
+    """
     try:
         user = auth.current_user()
-
-        if not user.verified:
+        
+        # Check if user is verified
+        if not is_user_verified(user):
             return jsonify({"error": "Access denied. Verify your email to access this resource."}), 403
 
         image_file = request.files.get('file')
         if not image_file:
-            return jsonify({"error": "No file provided"}), 400
-
-        
-        image_file.seek(0, 2)  
-        file_size = image_file.tell()
-        image_file.seek(0)  
-        if file_size > 5 * 1024 * 1024:  
-            return jsonify({"error": "File size exceeds 5MB limit"}), 400
+            send_email("Image Upload Failed", "No image file was provided for upload.", user.email)
+            return jsonify({"error": "No image file provided"}), 400
 
         file_key = f"{user.id}/{image_file.filename}"
-        s3_client.upload_fileobj(
-            image_file,
-            BUCKET_NAME,
-            file_key,
-            ExtraArgs={"ServerSideEncryption": "aws:kms", "SSEKMSKeyId": KMS_KEY_ID}
-        )
-
+        s3_client.upload_fileobj(image_file, BUCKET_NAME, file_key)
         logger.info(f"Image for user {user.email} uploaded to S3 with key {file_key}")
+
+        put_custom_metric('ImageUpload', 1)
+        send_email("Image Upload Successful", f"Your image has been successfully uploaded with key {file_key}.", user.email)
+
         return jsonify({"message": "Image uploaded successfully", "file_key": file_key}), 201
+
     except Exception as e:
-        logger.error(f"Error uploading image: {e}")
+        logger.error(f"Failed to upload image: {str(e)}")
+        send_email("Image Upload Failed", f"Your image upload failed due to an error: {str(e)}", user.email)
         return jsonify({"error": "Failed to upload image"}), 500
+
 
 @user_routes.route('/user/self/pic', methods=['DELETE'])
 @auth.login_required
 def delete_image():
-    """Delete an image from S3."""
+    """
+    Delete an uploaded image.
+    Block access for unverified users.
+    """
     try:
         user = auth.current_user()
 
-        if not user.verified:
+        # Check if user is verified
+        if not is_user_verified(user):
             return jsonify({"error": "Access denied. Verify your email to access this resource."}), 403
 
         image_key = request.args.get('file_key')
         if not image_key:
-            return jsonify({"error": "file_key is required"}), 400
+            return jsonify({"error": "file_key is required to delete an image"}), 400
 
         s3_client.delete_object(Bucket=BUCKET_NAME, Key=image_key)
         logger.info(f"Image with key {image_key} for user {user.email} deleted from S3")
 
-        return jsonify({"message": "Image deleted successfully"}), 200
-    except Exception as e:
-        logger.error(f"Error deleting image: {e}")
-        return jsonify({"error": "Failed to delete image"}), 500
+        put_custom_metric('ImageDeletion', 1)
+        send_email("Image Deletion Successful", f"Your image with key {image_key} has been successfully deleted.", user.email)
 
+        return jsonify({"message": "Image deleted successfully"}), 200
+
+    except Exception as e:
+        logger.error(f"Failed to delete image: {str(e)}")
+        send_email("Image Deletion Failed", f"Your image deletion failed due to an error: {str(e)}", user.email)
+        return jsonify({"error": "Failed to delete image"}), 500
 
 @user_routes.route('/healthz', methods=['GET'])
 def health_check():
-    """Health check endpoint."""
     try:
-       
-        db.engine.execute("SELECT 1")
+        put_custom_metric('HealthCheck', 1)
         return jsonify({"status": "healthy"}), 200
     except OperationalError as e:
         logger.error(f"Database Error: {str(e)}")

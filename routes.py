@@ -272,10 +272,22 @@ def upload_image():
             send_email("Image Upload Failed", "No image file was provided for upload.", user.email)
             return jsonify({"error": "No image file provided"}), 400
 
+        # Generate file key
         file_key = f"{user.id}/{image_file.filename}"
-        s3_client.upload_fileobj(image_file, BUCKET_NAME, file_key)
+
+        # Upload file with KMS encryption
+        s3_client.upload_fileobj(
+            image_file,
+            BUCKET_NAME,
+            file_key,
+            ExtraArgs={
+                "ServerSideEncryption": "aws:kms",
+                "SSEKMSKeyId": "arn:aws:kms:us-east-2:311141531170:key/7c898216-4d3c-4a06-844a-713fd9a3f67e"
+            }
+        )
         logger.info(f"Image for user {user.email} uploaded to S3 with key {file_key}")
 
+        # Update metrics and send confirmation email
         put_custom_metric('ImageUpload', 1)
         send_email("Image Upload Successful", f"Your image has been successfully uploaded with key {file_key}.", user.email)
 

@@ -92,16 +92,34 @@ def generate_verification_link(user_id):
     return f"{domain}/v1/verify?token={token}"
 
 def validate_verification_token(token):
+
     try:
+
         decoded_data = token.split("-")
+
         user_id = int(decoded_data[0])
+
         expiration_timestamp = float(decoded_data[1])
+
         if datetime.utcnow().timestamp() > expiration_timestamp:
+
             return None
+
         return user_id
+
     except Exception as e:
+
         logger.error(f"Error validating token: {e}")
+
         return None
+
+def is_user_verified(user):
+
+    """Check if the user is verified."""
+
+    return user.verified
+    
+    
 
 # Create User Endpoint
 @user_routes.route('/user', methods=['POST'])

@@ -338,3 +338,12 @@ def health_check():
     except OperationalError as e:
         logger.error(f"Database Error: {str(e)}")
         return jsonify({"error": "Service Unavailable"}), 503
+    
+@user_routes.route('/CICD', methods=['GET'])
+def CICD_SS():
+    try:
+        put_custom_metric('HealthCheck', 1)
+        return jsonify({"status": "healthy"}), 200
+    except OperationalError as e:
+        logger.error(f"Database Error: {str(e)}")
+        return jsonify({"error": "Service Unavailable"}), 503
